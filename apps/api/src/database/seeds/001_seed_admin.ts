@@ -193,6 +193,7 @@ export async function seed(knex: Knex): Promise<void> {
       id: p.id,
       company_id: companyId,
       owner_id: p.owner,
+      department_id: deptEngId,
       name: p.name,
       description: p.description,
       status: 'active',

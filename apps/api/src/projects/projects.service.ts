@@ -7,12 +7,47 @@ import { v4 as uuid } from 'uuid';
 export class ProjectsService {
   constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
 
-  async findAll(companyId: string, userId: string) {
+  async findAll(companyId: string, userId: string, userRole?: string) {
+    if (userRole === 'admin') {
+      return this.knex('projects as p')
+        .where('p.company_id', companyId)
+        .leftJoin('project_members as pm', function () {
+          this.on('pm.project_id', 'p.id').andOn('pm.user_id', this.knex.raw('?', [userId]));
+        })
+        .select('p.*', 'pm.role as member_role')
+        .orderBy('p.created_at', 'asc');
+    }
+
+    // Find departments where this user is the manager (dept head)
+    const managedDepts = await this.knex('departments')
+      .where({ company_id: companyId, manager_id: userId })
+      .pluck('id');
+
+    if (managedDepts.length > 0) {
+      // Dept head: all projects in their department(s) + their member projects
+      return this.knex('projects as p')
+        .where('p.company_id', companyId)
+        .where(function () {
+          this.whereIn('p.department_id', managedDepts).orWhereExists(function () {
+            this.from('project_members as pm')
+              .whereRaw('pm.project_id = p.id')
+              .where('pm.user_id', userId);
+          });
+        })
+        .leftJoin('project_members as pm', function () {
+          this.on('pm.project_id', 'p.id').andOn('pm.user_id', this.knex.raw('?', [userId]));
+        })
+        .select('p.*', 'pm.role as member_role')
+        .orderBy('p.created_at', 'asc');
+    }
+
+    // Employee / manager without dept head role: only member projects
     return this.knex('projects as p')
       .join('project_members as pm', 'p.id', 'pm.project_id')
       .where('p.company_id', companyId)
       .andWhere('pm.user_id', userId)
-      .select('p.*', 'pm.role as member_role');
+      .select('p.*', 'pm.role as member_role')
+      .orderBy('p.created_at', 'asc');
   }
 
   async findById(id: string, companyId: string) {
@@ -25,7 +60,7 @@ export class ProjectsService {
     return { ...project, members };
   }
 
-  async create(companyId: string, ownerId: string, data: { name: string; description?: string; color?: string; icon?: string }) {
+  async create(companyId: string, ownerId: string, data: { name: string; description?: string; color?: string; icon?: string; department_id?: string }) {
     const id = uuid();
     await this.knex('projects').insert({ id, company_id: companyId, owner_id: ownerId, ...data });
     await this.knex('project_members').insert({ id: uuid(), project_id: id, user_id: ownerId, role: 'owner' });

@@ -10,7 +10,7 @@ export class ProjectsController {
 
   @Get()
   findAll(@CurrentUser() user: any) {
-    return this.projectsService.findAll(user.company_id, user.id);
+    return this.projectsService.findAll(user.company_id, user.id, user.role);
   }
 
   @Get(':id')

@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { projectsApi } from '@/lib/api';
+import { projectsApi, departmentsApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Plus, FolderOpen } from 'lucide-react';
 import Link from 'next/link';
@@ -10,7 +10,8 @@ export default function ProjectsPage() {
   const qc = useQueryClient();
   const { data: projects = [], isLoading } = useQuery({ queryKey: ['projects'], queryFn: projectsApi.list });
   const [showNew, setShowNew] = useState(false);
-  const [form, setForm] = useState({ name: '', description: '', icon: '📁', color: '#4f46e5' });
+  const [form, setForm] = useState({ name: '', description: '', icon: '📁', color: '#4f46e5', department_id: '' });
+  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: departmentsApi.list, enabled: showNew });
 
   const createMutation = useMutation({
     mutationFn: (data: any) => projectsApi.create(data),
@@ -69,10 +70,16 @@ export default function ProjectsPage() {
                 <input value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })} placeholder="Icon 🚀" className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center" />
                 <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} className="w-10 h-10 rounded-lg border border-gray-300 cursor-pointer" />
               </div>
+              {departments.length > 0 && (
+                <select value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                  <option value="">No department</option>
+                  {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              )}
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={() => setShowNew(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700">Cancel</button>
-              <button onClick={() => createMutation.mutate(form)} disabled={!form.name || createMutation.isPending} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+              <button onClick={() => createMutation.mutate({ ...form, department_id: form.department_id || undefined })} disabled={!form.name || createMutation.isPending} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
                 {createMutation.isPending ? 'Creating…' : 'Create'}
               </button>
             </div>
