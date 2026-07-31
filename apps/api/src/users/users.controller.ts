@@ -40,6 +40,25 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('avatar')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: join(process.cwd(), 'uploads'),
+      filename: (_req, file, cb) => cb(null, `avatar-${uuid()}${extname(file.originalname)}`),
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+    fileFilter: (_req, file, cb) => {
+      if (!file.mimetype.startsWith('image/')) return cb(new Error('Only images allowed'), false);
+      cb(null, true);
+    },
+  }))
+  async uploadAvatar(@UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) {
+    const url = `${process.env.API_URL ?? 'http://localhost:3001'}/uploads/${file.filename}`;
+    await this.usersService.update(user.id, { avatar_url: url });
+    return { url };
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get()
   listByCompany(@CurrentUser() user: any) {
     return this.usersService.findByCompany(user.company_id, user.id, user.role);

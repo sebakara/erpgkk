@@ -5,10 +5,11 @@ import {
   Plus, Check, X, Search, Users, Star, FileText, Package,
   ChevronDown, ChevronRight, Building2, Shield, Briefcase, Trash2, Pencil,
   CalendarDays, AlertCircle, Filter, TrendingUp, Award, MessageSquare,
-  Phone, Mail, MapPin, CreditCard, AlertTriangle, ExternalLink, User,
+  Phone, Mail, MapPin, CreditCard, AlertTriangle, ExternalLink, User, Camera,
 } from 'lucide-react';
 import { hrApi, usersApi, departmentsApi, performanceApi, leavePackagesApi, chatApi } from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import { useRef } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate, cn, getInitials } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -596,6 +597,7 @@ function EmployeeCard({ emp, isManager, isDeptHead, onView }: { emp: any; isMana
 function EmployeeProfileDrawer({ emp, isManager, currentUser, onClose }: { emp: any; isManager: boolean; currentUser: any; onClose: () => void }) {
   const qc = useQueryClient();
   const router = useRouter();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['employee', emp.id],
@@ -618,8 +620,19 @@ function EmployeeProfileDrawer({ emp, isManager, currentUser, onClose }: { emp: 
     onSuccess: (conv: any) => router.push(`/chat?conv=${conv.id}`),
   });
 
+  const avatarMutation = useMutation({
+    mutationFn: (file: File) => usersApi.uploadAvatar(file),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['employee', emp.id] });
+      qc.invalidateQueries({ queryKey: ['employees'] });
+      toast.success('Profile picture updated');
+    },
+    onError: () => toast.error('Failed to upload photo'),
+  });
+
   const p = profile ?? emp;
   const isSelf = emp.id === currentUser?.id;
+  const canEditAvatar = isSelf || currentUser?.role === 'admin';
 
   const balanceMap = (balance as any[]).reduce<Record<string, any>>((acc, b) => {
     if (!acc[b.leave_type]) acc[b.leave_type] = b;
@@ -640,11 +653,34 @@ function EmployeeProfileDrawer({ emp, isManager, currentUser, onClose }: { emp: 
           </button>
 
           <div className="flex items-end gap-4 mt-2">
-            {p.avatar_url
-              ? <img src={p.avatar_url} className="w-16 h-16 rounded-2xl object-cover border-2 border-white/30" />
-              : <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center text-2xl font-bold text-white border-2 border-white/30">
-                  {getInitials(`${p.first_name} ${p.last_name}`)}
-                </div>}
+            {/* Avatar with upload overlay */}
+            <div className="relative group shrink-0">
+              {p.avatar_url
+                ? <img src={p.avatar_url} className="w-16 h-16 rounded-2xl object-cover border-2 border-white/30" />
+                : <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center text-2xl font-bold text-white border-2 border-white/30">
+                    {getInitials(`${p.first_name} ${p.last_name}`)}
+                  </div>}
+              {canEditAvatar && (
+                <>
+                  <button
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={avatarMutation.isPending}
+                    className="absolute inset-0 rounded-2xl bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  >
+                    {avatarMutation.isPending
+                      ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      : <Camera size={18} className="text-white" />}
+                  </button>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) avatarMutation.mutate(f); e.target.value = ''; }}
+                  />
+                </>
+              )}
+            </div>
             <div className="flex-1 min-w-0">
               <h2 className="text-xl font-bold text-white truncate">{p.first_name} {p.last_name}</h2>
               <p className="text-indigo-200 text-sm">{p.job_title ?? 'No title'}</p>

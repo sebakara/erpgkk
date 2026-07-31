@@ -1,7 +1,7 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { User, Lock, CheckCircle } from 'lucide-react';
+import { User, Lock, CheckCircle, Camera } from 'lucide-react';
 import { authApi, usersApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { getInitials, cn } from '@/lib/utils';
@@ -56,6 +56,16 @@ export default function ProfilePage() {
   };
 
   const initials = getInitials(`${user?.first_name} ${user?.last_name}`);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const avatarMutation = useMutation({
+    mutationFn: (file: File) => usersApi.uploadAvatar(file),
+    onSuccess: (data: any) => {
+      updateUser({ ...user!, avatar_url: data.url });
+      toast.success('Profile picture updated');
+    },
+    onError: () => toast.error('Failed to upload photo'),
+  });
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -63,8 +73,28 @@ export default function ProfilePage() {
 
       {/* Avatar + name header */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 flex items-center gap-5">
-        <div className="w-16 h-16 rounded-full bg-indigo-100 text-indigo-700 text-xl font-bold flex items-center justify-center shrink-0">
-          {initials}
+        <div className="relative group shrink-0">
+          {user?.avatar_url
+            ? <img src={user.avatar_url} className="w-16 h-16 rounded-full object-cover" />
+            : <div className="w-16 h-16 rounded-full bg-indigo-100 text-indigo-700 text-xl font-bold flex items-center justify-center">
+                {initials}
+              </div>}
+          <button
+            onClick={() => avatarInputRef.current?.click()}
+            disabled={avatarMutation.isPending}
+            className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+          >
+            {avatarMutation.isPending
+              ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              : <Camera size={18} className="text-white" />}
+          </button>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) avatarMutation.mutate(f); e.target.value = ''; }}
+          />
         </div>
         <div>
           <p className="text-lg font-bold text-gray-900">{user?.first_name} {user?.last_name}</p>
@@ -72,6 +102,7 @@ export default function ProfilePage() {
           <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 capitalize font-medium">
             {user?.role}
           </span>
+          <p className="text-xs text-gray-400 mt-1">Hover the photo to change it</p>
         </div>
       </div>
 
