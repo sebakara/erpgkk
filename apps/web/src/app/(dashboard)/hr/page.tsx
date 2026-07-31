@@ -29,7 +29,7 @@ export default function HrPage() {
 
   const allTabs: { key: Tab; label: string; icon: React.ReactNode; managerOnly?: boolean }[] = [
     { key: 'overview', label: isManager ? 'Overview' : 'My Leave', icon: <FileText size={14} /> },
-    { key: 'employees', label: 'Employees', icon: <Users size={14} />, managerOnly: true },
+    { key: 'employees', label: 'Employees', icon: <Users size={14} /> },
     { key: 'leave-packages', label: 'Leave Packages', icon: <Package size={14} />, managerOnly: true },
     { key: 'performance', label: 'Performance', icon: <Star size={14} /> },
   ];
@@ -55,7 +55,7 @@ export default function HrPage() {
       </div>
 
       {tab === 'overview' && <OverviewTab isManager={isManager} user={user} />}
-      {tab === 'employees' && <EmployeesTab isManager={isManager} />}
+      {tab === 'employees' && <EmployeesTab isManager={isManager} currentUser={user} />}
       {tab === 'leave-packages' && <LeavePackagesTab isManager={isManager} />}
       {tab === 'performance' && <PerformanceTab user={user} />}
     </div>
@@ -324,7 +324,7 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
 }
 
 /* ─── EMPLOYEES TAB ─────────────────────────────────────────────────────── */
-function EmployeesTab({ isManager }: { isManager: boolean }) {
+function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentUser: any }) {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
@@ -346,6 +346,10 @@ function EmployeesTab({ isManager }: { isManager: boolean }) {
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to create employee'),
   });
 
+  // Determine view mode from what the backend returned
+  const isSelfOnly = !isManager && (employees as any[]).length === 1 && (employees as any[])[0]?.id === currentUser?.id;
+  const isDeptHead = !isManager && (employees as any[]).length > 0 && !isSelfOnly;
+
   const filtered = (employees as any[]).filter((e) => {
     const name = `${e.first_name} ${e.last_name} ${e.email} ${e.job_title ?? ''}`.toLowerCase();
     return (!search || name.includes(search.toLowerCase()))
@@ -362,14 +366,33 @@ function EmployeesTab({ isManager }: { isManager: boolean }) {
 
   if (isLoading) return <Spinner />;
 
+  // Regular employee: show only their own profile card
+  if (isSelfOnly) {
+    const me = (employees as any[])[0];
+    return (
+      <div className="max-w-sm">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">My Profile</p>
+        <EmployeeCard emp={me} isManager={false} isDeptHead={false} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">
+          {isDeptHead ? `Your department · ${(employees as any[]).length} member${(employees as any[]).length !== 1 ? 's' : ''}` : `${filtered.length} employee${filtered.length !== 1 ? 's' : ''}`}
+        </p>
+      </div>
+
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search employees…"
             className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
+        {isManager && <>
         <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)} className="px-3 py-2 text-sm border border-gray-300 rounded-lg">
           <option value="all">All Departments</option>
           {(departments as any[]).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -380,7 +403,7 @@ function EmployeesTab({ isManager }: { isManager: boolean }) {
           <option value="manager">Manager</option>
           <option value="employee">Employee</option>
         </select>
-        <span className="text-sm text-gray-400">{filtered.length} employee{filtered.length !== 1 ? 's' : ''}</span>
+        </>}
         {isManager && (
           <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors ml-auto">
             <Plus size={14} /> Add Employee

@@ -39,11 +39,10 @@ export class UsersController {
     return { url: `${process.env.API_URL ?? 'http://localhost:3001'}/uploads/${file.filename}` };
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard)
   @Get()
-  @Roles(Role.Admin, Role.Manager)
   listByCompany(@CurrentUser() user: any) {
-    return this.usersService.findByCompany(user.company_id);
+    return this.usersService.findByCompany(user.company_id, user.id, user.role);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

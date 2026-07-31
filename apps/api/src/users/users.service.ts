@@ -23,8 +23,8 @@ export class UsersService {
     return this.knex('users').where({ email }).first();
   }
 
-  async findByCompany(companyId: string) {
-    return this.knex('users as u')
+  async findByCompany(companyId: string, callerId?: string, callerRole?: string) {
+    const q = this.knex('users as u')
       .where('u.company_id', companyId)
       .leftJoin('departments as d', 'u.department_id', 'd.id')
       .leftJoin('users as m', 'u.reports_to', 'm.id')
@@ -38,6 +38,21 @@ export class UsersService {
         'm.avatar_url as reports_to_avatar',
       )
       .orderBy('u.first_name');
+
+    if (!callerId || callerRole === 'admin') return q;
+
+    // Check if the caller is a dept head
+    const managedDepts = await this.knex('departments')
+      .where({ company_id: companyId, manager_id: callerId })
+      .pluck('id');
+
+    if (managedDepts.length > 0) {
+      // Dept head: see everyone in their department(s)
+      return q.whereIn('u.department_id', managedDepts);
+    }
+
+    // Regular employee: only themselves
+    return q.where('u.id', callerId);
   }
 
   async update(id: string, data: Partial<{
