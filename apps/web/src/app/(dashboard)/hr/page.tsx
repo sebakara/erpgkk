@@ -138,27 +138,34 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
         )}
       </div>
 
-      {/* Employee's leave balance summary */}
-      {!isManager && Object.keys(balanceMap).length > 0 && (
+      {/* Leave balance summary — visible to everyone */}
+      {Object.keys(balanceMap).length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h2 className="font-semibold text-gray-900 mb-4">My Leave Balance</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {Object.values(balanceMap).map((b) => (
-              <div key={b.leave_type} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                <p className="text-xs font-medium text-gray-500 capitalize mb-1">{b.leave_type}</p>
-                <div className="flex items-end justify-between mb-1.5">
-                  <span className="text-xl font-bold text-gray-900">{b.days_remaining}</span>
-                  <span className="text-xs text-gray-400">/ {b.days_allowed} days</span>
+            {Object.values(balanceMap).map((b) => {
+              const exhausted = b.days_remaining === 0;
+              const pct = Math.min(100, b.days_allowed > 0 ? (b.days_remaining / b.days_allowed) * 100 : 0);
+              return (
+                <div key={b.leave_type} className={cn('p-3 rounded-lg border', exhausted ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-100')}>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className={cn('text-xs font-medium capitalize', exhausted ? 'text-red-500' : 'text-gray-500')}>{b.leave_type}</p>
+                    {exhausted && <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-medium">Exhausted</span>}
+                  </div>
+                  <div className="flex items-end justify-between mb-1.5">
+                    <span className={cn('text-xl font-bold', exhausted ? 'text-red-600' : 'text-gray-900')}>{b.days_remaining}</span>
+                    <span className="text-xs text-gray-400">/ {b.days_allowed} days</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className={cn('h-full rounded-full', exhausted ? 'bg-red-400' : pct > 30 ? 'bg-green-500' : 'bg-amber-500')}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">{b.days_used} used · {b.package_name}</p>
                 </div>
-                <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className={cn('h-full rounded-full', b.days_remaining > b.days_allowed * 0.3 ? 'bg-green-500' : 'bg-amber-500')}
-                    style={{ width: `${Math.min(100, (b.days_remaining / b.days_allowed) * 100)}%` }}
-                  />
-                </div>
-                <p className="text-xs text-gray-400 mt-1">{b.days_used} used · {b.package_name}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -251,9 +258,15 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
                 onChange={(e) => setLeaveForm({ ...leaveForm, type: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
               >
-                {leaveTypeOptions.map((t) => (
-                  <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-                ))}
+                {leaveTypeOptions.map((t) => {
+                  const bal = balanceMap[t];
+                  const exhausted = bal && bal.days_remaining === 0;
+                  return (
+                    <option key={t} value={t} disabled={!!exhausted}>
+                      {t.charAt(0).toUpperCase() + t.slice(1)}{exhausted ? ' (exhausted)' : bal ? ` — ${bal.days_remaining}d left` : ''}
+                    </option>
+                  );
+                })}
               </select>
 
               {/* Balance info for selected type */}
@@ -297,7 +310,7 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
               <button onClick={() => setShowLeave(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">Cancel</button>
               <button
                 onClick={() => createLeave.mutate(leaveForm)}
-                disabled={!leaveForm.start_date || !leaveForm.end_date || createLeave.isPending}
+                disabled={!leaveForm.start_date || !leaveForm.end_date || createLeave.isPending || !!overLimit || selectedBalance?.days_remaining === 0}
                 className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
               >
                 {createLeave.isPending ? 'Submitting…' : 'Submit'}
