@@ -11,10 +11,7 @@ export class ProjectsService {
     if (userRole === 'admin') {
       return this.knex('projects as p')
         .where('p.company_id', companyId)
-        .leftJoin('project_members as pm', function () {
-          this.on('pm.project_id', 'p.id').andOn('pm.user_id', this.knex.raw('?', [userId]));
-        })
-        .select('p.*', 'pm.role as member_role')
+        .select('p.*')
         .orderBy('p.created_at', 'asc');
     }
 
@@ -24,20 +21,11 @@ export class ProjectsService {
       .pluck('id');
 
     if (managedDepts.length > 0) {
-      // Dept head: all projects in their department(s) + their member projects
+      // Dept head: all projects in their department(s)
       return this.knex('projects as p')
         .where('p.company_id', companyId)
-        .where(function () {
-          this.whereIn('p.department_id', managedDepts).orWhereExists(function () {
-            this.from('project_members as pm')
-              .whereRaw('pm.project_id = p.id')
-              .where('pm.user_id', userId);
-          });
-        })
-        .leftJoin('project_members as pm', function () {
-          this.on('pm.project_id', 'p.id').andOn('pm.user_id', this.knex.raw('?', [userId]));
-        })
-        .select('p.*', 'pm.role as member_role')
+        .whereIn('p.department_id', managedDepts)
+        .select('p.*')
         .orderBy('p.created_at', 'asc');
     }
 

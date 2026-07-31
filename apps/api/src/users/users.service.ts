@@ -1,12 +1,19 @@
-import { Injectable, Inject, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
+import { MailService } from '../common/services/mail.service';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
 
 @Injectable()
 export class UsersService {
-  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
+  constructor(
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
+    private readonly mail: MailService,
+    private readonly config: ConfigService,
+  ) {}
 
   async findById(id: string) {
     return this.knex('users').where({ id }).first();
@@ -22,20 +29,24 @@ export class UsersService {
       .leftJoin('departments as d', 'u.department_id', 'd.id')
       .select(
         'u.id', 'u.email', 'u.first_name', 'u.last_name', 'u.role',
-        'u.job_title', 'u.avatar_url', 'u.department_id', 'u.is_active', 'u.created_at',
+        'u.job_title', 'u.avatar_url', 'u.department_id', 'u.is_active',
+        'u.onboarding_completed', 'u.created_at',
         'd.name as department_name',
       )
       .orderBy('u.first_name');
   }
 
-  async update(id: string, data: Partial<{ first_name: string; last_name: string; job_title: string; avatar_url: string; department_id: string; role: string; is_active: boolean }>) {
+  async update(id: string, data: Partial<{
+    first_name: string; last_name: string; job_title: string;
+    avatar_url: string; department_id: string; role: string; is_active: boolean;
+  }>) {
     await this.knex('users').where({ id }).update({ ...data, updated_at: new Date() });
     return this.findById(id);
   }
 
+  // HR creates a placeholder user and sends invite email
   async createEmployee(companyId: string, data: {
     email: string;
-    password: string;
     first_name: string;
     last_name: string;
     role?: string;
@@ -44,8 +55,13 @@ export class UsersService {
   }) {
     const existing = await this.findByEmail(data.email);
     if (existing) throw new ConflictException('Email already in use');
+
+    const company = await this.knex('companies').where({ id: companyId }).first();
+
     const id = uuid();
-    const password_hash = await bcrypt.hash(data.password, 10);
+    // Placeholder password — employee sets their own during onboarding
+    const password_hash = await bcrypt.hash(uuid(), 10);
+
     await this.knex('users').insert({
       id,
       company_id: companyId,
@@ -56,9 +72,76 @@ export class UsersService {
       role: data.role ?? 'employee',
       job_title: data.job_title ?? null,
       department_id: data.department_id ?? null,
-      is_active: true,
+      is_active: false,
+      onboarding_completed: false,
     });
+
+    // Create invite token (valid 7 days)
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await this.knex('invites').insert({ id: uuid(), user_id: id, token, expires_at });
+
+    const frontendUrl = this.config.get('FRONTEND_URL', 'http://localhost:3000');
+    const inviteUrl = `${frontendUrl}/onboarding?token=${token}`;
+
+    await this.mail.sendInvite({
+      to: data.email,
+      name: `${data.first_name} ${data.last_name}`,
+      companyName: company?.name ?? 'Your Company',
+      inviteUrl,
+    });
+
     return this.findByCompany(companyId).then((list) => list.find((u: any) => u.id === id));
+  }
+
+  // Validate an invite token and return the pre-filled user info
+  async getInvite(token: string) {
+    const invite = await this.knex('invites').where({ token, used: false }).first();
+    if (!invite) throw new BadRequestException('Invalid or expired invite link');
+    if (new Date(invite.expires_at) < new Date()) throw new BadRequestException('Invite link has expired');
+
+    const user = await this.knex('users as u')
+      .where('u.id', invite.user_id)
+      .join('companies as c', 'u.company_id', 'c.id')
+      .select('u.id', 'u.first_name', 'u.last_name', 'u.email', 'c.name as company_name')
+      .first();
+
+    return { ...user, token };
+  }
+
+  // Employee completes onboarding
+  async completeOnboarding(token: string, data: {
+    password: string;
+    nid: string;
+    phone: string;
+    address: string;
+    bank_name: string;
+    bank_account_name: string;
+    bank_account_number: string;
+    passport_url?: string;
+    nid_url?: string;
+    emergency_contact_name: string;
+    emergency_contact_phone: string;
+    emergency_contact_relation: string;
+  }) {
+    const invite = await this.knex('invites').where({ token, used: false }).first();
+    if (!invite) throw new BadRequestException('Invalid or expired invite link');
+    if (new Date(invite.expires_at) < new Date()) throw new BadRequestException('Invite link has expired');
+
+    const password_hash = await bcrypt.hash(data.password, 10);
+    const { password, ...rest } = data;
+
+    await this.knex('users').where({ id: invite.user_id }).update({
+      password_hash,
+      ...rest,
+      is_active: true,
+      onboarding_completed: true,
+      updated_at: new Date(),
+    });
+
+    await this.knex('invites').where({ id: invite.id }).update({ used: true });
+
+    return { success: true };
   }
 
   async remove(id: string) {

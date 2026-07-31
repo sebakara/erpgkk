@@ -76,7 +76,6 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
   const { data: balance = [] } = useQuery<LeaveBalance[]>({
     queryKey: ['leave-balance', 'mine'],
     queryFn: leavePackagesApi.myBalance,
-    enabled: !isManager,
   });
 
   const createLeave = useMutation({
@@ -99,11 +98,22 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
     return acc;
   }, {});
 
+  // Use enrolled types for the dropdown; fall back to LEAVE_TYPES if no balance loaded yet
+  const enrolledTypes = Object.keys(balanceMap);
+  const leaveTypeOptions = enrolledTypes.length > 0 ? enrolledTypes : LEAVE_TYPES;
+
   const requestedDays = leaveForm.start_date && leaveForm.end_date
     ? Math.max(1, Math.round((new Date(leaveForm.end_date).getTime() - new Date(leaveForm.start_date).getTime()) / 86400000) + 1)
     : 0;
   const selectedBalance = balanceMap[leaveForm.type];
   const overLimit = selectedBalance && requestedDays > selectedBalance.days_remaining;
+
+  // When modal opens, default to the employee's first enrolled leave type
+  const openLeaveModal = () => {
+    const firstType = leaveTypeOptions[0] ?? 'annual';
+    setLeaveForm({ type: firstType, start_date: '', end_date: '', reason: '' });
+    setShowLeave(true);
+  };
 
   return (
     <div className="space-y-5">
@@ -158,7 +168,7 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-gray-900">{isManager ? 'All Leave Requests' : 'My Leave Requests'}</h2>
           <button
-            onClick={() => setShowLeave(true)}
+            onClick={openLeaveModal}
             className="flex items-center gap-1.5 bg-primary-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary-700"
           >
             <Plus size={14} /> Request Leave
@@ -217,7 +227,7 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
             <h2 className="text-lg font-bold mb-4">Request Leave</h2>
 
             {/* Balance summary in modal */}
-            {!isManager && Object.keys(balanceMap).length > 0 && (
+            {Object.keys(balanceMap).length > 0 && (
               <div className="mb-4 p-3 bg-gray-50 rounded-xl border border-gray-100 space-y-2">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Your Balance</p>
                 {Object.values(balanceMap).map((b) => (
@@ -241,17 +251,27 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
                 onChange={(e) => setLeaveForm({ ...leaveForm, type: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
               >
-                {LEAVE_TYPES.map((t) => (
+                {leaveTypeOptions.map((t) => (
                   <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>
                 ))}
               </select>
 
-              {/* Balance warning for selected type */}
-              {!isManager && selectedBalance && (
-                <p className={cn('text-xs px-2', overLimit ? 'text-red-500' : 'text-green-600')}>
-                  {selectedBalance.leave_type.charAt(0).toUpperCase() + selectedBalance.leave_type.slice(1)}: {selectedBalance.days_remaining} days remaining
-                  {requestedDays > 0 && ` · Requesting ${requestedDays} day${requestedDays !== 1 ? 's' : ''}`}
-                  {overLimit && ' ⚠ Exceeds balance'}
+              {/* Balance info for selected type */}
+              {selectedBalance && (
+                <div className={cn('rounded-lg px-3 py-2 text-xs flex items-center justify-between', overLimit ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200')}>
+                  <span className={cn('font-medium', overLimit ? 'text-red-700' : 'text-green-700')}>
+                    {selectedBalance.days_remaining} of {selectedBalance.days_allowed} days remaining
+                  </span>
+                  {requestedDays > 0 && (
+                    <span className={cn('font-semibold', overLimit ? 'text-red-600' : 'text-green-600')}>
+                      {overLimit ? `⚠ ${requestedDays}d requested — exceeds balance` : `${requestedDays} day${requestedDays !== 1 ? 's' : ''} requested`}
+                    </span>
+                  )}
+                </div>
+              )}
+              {!selectedBalance && leaveForm.type && (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  No balance found for this leave type — you may not be enrolled in this package.
                 </p>
               )}
 
@@ -297,7 +317,7 @@ function EmployeesTab({ isManager }: { isManager: boolean }) {
   const [deptFilter, setDeptFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState('all');
   const [showAdd, setShowAdd] = useState(false);
-  const [addForm, setAddForm] = useState({ first_name: '', last_name: '', email: '', password: '', role: 'employee', job_title: '', department_id: '' });
+  const [addForm, setAddForm] = useState({ first_name: '', last_name: '', email: '', role: 'employee', job_title: '', department_id: '' });
 
   const { data: employees = [], isLoading } = useQuery({ queryKey: ['employees'], queryFn: usersApi.list });
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: departmentsApi.list });
@@ -306,9 +326,9 @@ function EmployeesTab({ isManager }: { isManager: boolean }) {
     mutationFn: () => usersApi.create(addForm),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['employees'] });
-      toast.success('Employee created');
+      toast.success('Invite sent! Employee will receive an email to complete onboarding.');
       setShowAdd(false);
-      setAddForm({ first_name: '', last_name: '', email: '', password: '', role: 'employee', job_title: '', department_id: '' });
+      setAddForm({ first_name: '', last_name: '', email: '', role: 'employee', job_title: '', department_id: '' });
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to create employee'),
   });
@@ -413,12 +433,9 @@ function EmployeesTab({ isManager }: { isManager: boolean }) {
                 <input type="email" value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Temporary password *</label>
-                <input type="password" value={addForm.password} onChange={(e) => setAddForm({ ...addForm, password: e.target.value })}
-                  placeholder="Min 8 characters"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-              </div>
+              <p className="text-xs text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2 border border-indigo-100">
+                An invitation email will be sent to the employee to complete their onboarding and set their password.
+              </p>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Job title</label>
                 <input value={addForm.job_title} onChange={(e) => setAddForm({ ...addForm, job_title: e.target.value })}
@@ -449,10 +466,10 @@ function EmployeesTab({ isManager }: { isManager: boolean }) {
               <button onClick={() => setShowAdd(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">Cancel</button>
               <button
                 onClick={() => createMutation.mutate()}
-                disabled={!addForm.first_name || !addForm.last_name || !addForm.email || !addForm.password || createMutation.isPending}
+                disabled={!addForm.first_name || !addForm.last_name || !addForm.email || createMutation.isPending}
                 className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-primary-700"
               >
-                {createMutation.isPending ? 'Creating…' : 'Create Employee'}
+                {createMutation.isPending ? 'Sending invite…' : 'Send Invite'}
               </button>
             </div>
           </div>
