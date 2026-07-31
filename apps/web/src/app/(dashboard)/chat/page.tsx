@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'next/navigation';
 import { chatApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { cn } from '@/lib/utils';
@@ -298,7 +299,8 @@ function ConvItem({ conv, active, onClick, currentUserId }: { conv: any; active:
 
 export default function ChatPage() {
   const user = useAuthStore((s) => s.user);
-  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const [activeConvId, setActiveConvId] = useState<string | null>(searchParams.get('conv'));
   const [showNew, setShowNew] = useState(false);
 
   const { data: convs } = useQuery({

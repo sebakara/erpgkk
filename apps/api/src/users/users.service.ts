@@ -16,7 +16,18 @@ export class UsersService {
   ) {}
 
   async findById(id: string) {
-    return this.knex('users').where({ id }).first();
+    return this.knex('users as u')
+      .where('u.id', id)
+      .leftJoin('departments as d', 'u.department_id', 'd.id')
+      .leftJoin('users as m', 'u.reports_to', 'm.id')
+      .select(
+        'u.*',
+        'd.name as department_name',
+        this.knex.raw("CONCAT(m.first_name, ' ', m.last_name) as reports_to_name"),
+        'm.job_title as reports_to_job_title',
+        'm.avatar_url as reports_to_avatar',
+      )
+      .first();
   }
 
   async findByEmail(email: string) {

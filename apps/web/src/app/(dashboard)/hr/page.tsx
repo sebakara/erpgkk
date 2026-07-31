@@ -4,9 +4,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Check, X, Search, Users, Star, FileText, Package,
   ChevronDown, ChevronRight, Building2, Shield, Briefcase, Trash2, Pencil,
-  CalendarDays, AlertCircle, Filter, TrendingUp, Award,
+  CalendarDays, AlertCircle, Filter, TrendingUp, Award, MessageSquare,
+  Phone, Mail, MapPin, CreditCard, AlertTriangle, ExternalLink, User,
 } from 'lucide-react';
-import { hrApi, usersApi, departmentsApi, performanceApi, leavePackagesApi } from '@/lib/api';
+import { hrApi, usersApi, departmentsApi, performanceApi, leavePackagesApi, chatApi } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate, cn, getInitials } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -330,6 +332,7 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
   const [deptFilter, setDeptFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState('all');
   const [showAdd, setShowAdd] = useState(false);
+  const [viewingEmp, setViewingEmp] = useState<any>(null);
   const [addForm, setAddForm] = useState({ first_name: '', last_name: '', email: '', role: 'employee', job_title: '', department_id: '' });
 
   const { data: employees = [], isLoading } = useQuery({ queryKey: ['employees'], queryFn: usersApi.list });
@@ -372,7 +375,10 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
     return (
       <div className="max-w-sm">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">My Profile</p>
-        <EmployeeCard emp={me} isManager={false} isDeptHead={false} />
+        <EmployeeCard emp={me} isManager={false} isDeptHead={false} onView={setViewingEmp} />
+        {viewingEmp && (
+          <EmployeeProfileDrawer emp={viewingEmp} isManager={isManager} currentUser={currentUser} onClose={() => setViewingEmp(null)} />
+        )}
       </div>
     );
   }
@@ -433,7 +439,7 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
               )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {emps.map((emp) => <EmployeeCard key={emp.id} emp={emp} isManager={isManager} isDeptHead={emp.id === headId} />)}
+              {emps.map((emp) => <EmployeeCard key={emp.id} emp={emp} isManager={isManager} isDeptHead={emp.id === headId} onView={setViewingEmp} />)}
             </div>
           </div>
         );
@@ -444,6 +450,11 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
           <Users size={32} className="text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500 text-sm">No employees match your filters.</p>
         </div>
+      )}
+
+      {/* Profile drawer */}
+      {viewingEmp && (
+        <EmployeeProfileDrawer emp={viewingEmp} isManager={isManager} currentUser={currentUser} onClose={() => setViewingEmp(null)} />
       )}
 
       {/* Add Employee Modal */}
@@ -528,29 +539,27 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
   );
 }
 
-function EmployeeCard({ emp, isManager, isDeptHead }: { emp: any; isManager: boolean; isDeptHead?: boolean }) {
-  const qc = useQueryClient();
-  const [expanded, setExpanded] = useState(false);
-  const ROLE_COLOR: Record<string, string> = {
-    admin: 'bg-purple-100 text-purple-700',
-    manager: 'bg-blue-100 text-blue-700',
-    employee: 'bg-gray-100 text-gray-600',
-  };
-  const deactivate = useMutation({
-    mutationFn: () => usersApi.update(emp.id, { is_active: false }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['employees'] }); toast.success('Employee deactivated'); },
-  });
+const ROLE_COLOR: Record<string, string> = {
+  admin: 'bg-purple-100 text-purple-700',
+  manager: 'bg-blue-100 text-blue-700',
+  employee: 'bg-gray-100 text-gray-600',
+};
+
+function EmployeeCard({ emp, isManager, isDeptHead, onView }: { emp: any; isManager: boolean; isDeptHead?: boolean; onView: (emp: any) => void }) {
   return (
-    <div className={cn(
-      'bg-white rounded-xl border p-4 transition-colors',
-      isDeptHead ? 'border-amber-300 ring-1 ring-amber-200' : 'border-gray-200',
-      !emp.is_active && 'opacity-50',
-    )}>
+    <div
+      onClick={() => onView(emp)}
+      className={cn(
+        'bg-white rounded-xl border p-4 transition-all cursor-pointer hover:shadow-md hover:border-indigo-200',
+        isDeptHead ? 'border-amber-300 ring-1 ring-amber-200' : 'border-gray-200',
+        !emp.is_active && 'opacity-50',
+      )}
+    >
       <div className="flex items-start gap-3">
         <div className="relative shrink-0">
-          <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-bold text-sm flex items-center justify-center">
-            {getInitials(`${emp.first_name} ${emp.last_name}`)}
-          </div>
+          {emp.avatar_url
+            ? <img src={emp.avatar_url} className="w-10 h-10 rounded-full object-cover" />
+            : <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-bold text-sm flex items-center justify-center">{getInitials(`${emp.first_name} ${emp.last_name}`)}</div>}
           {isDeptHead && (
             <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center" title="Department Head">
               <Shield size={9} className="text-white" />
@@ -560,9 +569,7 @@ function EmployeeCard({ emp, isManager, isDeptHead }: { emp: any; isManager: boo
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <p className="font-semibold text-gray-900 text-sm truncate">{emp.first_name} {emp.last_name}</p>
-            {isDeptHead && (
-              <span className="text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full shrink-0">Head</span>
-            )}
+            {isDeptHead && <span className="text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full shrink-0">Head</span>}
           </div>
           {emp.job_title && <p className="text-xs text-gray-500 truncate">{emp.job_title}</p>}
           <p className="text-xs text-gray-400 truncate">{emp.email}</p>
@@ -577,22 +584,212 @@ function EmployeeCard({ emp, isManager, isDeptHead }: { emp: any; isManager: boo
           {emp.role}
         </span>
       </div>
-      {isManager && (
-        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
-          <p className="text-xs text-gray-400">Joined {formatDate(emp.created_at)}</p>
-          <button onClick={() => setExpanded((v) => !v)} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
-            Actions <ChevronDown size={11} className={cn('transition-transform', expanded && 'rotate-180')} />
+      <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+        <p className="text-xs text-gray-400">Joined {formatDate(emp.created_at)}</p>
+        <span className="text-xs text-indigo-500 font-medium flex items-center gap-1">View profile <ExternalLink size={10} /></span>
+      </div>
+    </div>
+  );
+}
+
+/* ─── EMPLOYEE PROFILE DRAWER ───────────────────────────────────────────── */
+function EmployeeProfileDrawer({ emp, isManager, currentUser, onClose }: { emp: any; isManager: boolean; currentUser: any; onClose: () => void }) {
+  const qc = useQueryClient();
+  const router = useRouter();
+
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ['employee', emp.id],
+    queryFn: () => usersApi.get(emp.id),
+  });
+
+  const { data: balance = [] } = useQuery<any[]>({
+    queryKey: ['employee-balance', emp.id],
+    queryFn: () => leavePackagesApi.myBalance(),
+    enabled: emp.id === currentUser?.id,
+  });
+
+  const deactivate = useMutation({
+    mutationFn: () => usersApi.update(emp.id, { is_active: false }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['employees'] }); toast.success('Account deactivated'); onClose(); },
+  });
+
+  const startChat = useMutation({
+    mutationFn: () => chatApi.startDirect(emp.id),
+    onSuccess: (conv: any) => router.push(`/chat?conv=${conv.id}`),
+  });
+
+  const p = profile ?? emp;
+  const isSelf = emp.id === currentUser?.id;
+
+  const balanceMap = (balance as any[]).reduce<Record<string, any>>((acc, b) => {
+    if (!acc[b.leave_type]) acc[b.leave_type] = b;
+    return acc;
+  }, {});
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 bg-black/30 z-40 backdrop-blur-sm" onClick={onClose} />
+
+      {/* Drawer */}
+      <div className="fixed inset-y-0 right-0 w-full max-w-lg bg-white shadow-2xl z-50 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-br from-indigo-700 to-indigo-900 px-6 pt-6 pb-8 relative">
+          <button onClick={onClose} className="absolute top-4 right-4 p-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors">
+            <X size={16} className="text-white" />
           </button>
+
+          <div className="flex items-end gap-4 mt-2">
+            {p.avatar_url
+              ? <img src={p.avatar_url} className="w-16 h-16 rounded-2xl object-cover border-2 border-white/30" />
+              : <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center text-2xl font-bold text-white border-2 border-white/30">
+                  {getInitials(`${p.first_name} ${p.last_name}`)}
+                </div>}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl font-bold text-white truncate">{p.first_name} {p.last_name}</h2>
+              <p className="text-indigo-200 text-sm">{p.job_title ?? 'No title'}</p>
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full capitalize', ROLE_COLOR[p.role])}>{p.role}</span>
+                {p.department_name && <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full">{p.department_name}</span>}
+                {!p.is_active && <span className="text-[10px] bg-red-400/80 text-white px-2 py-0.5 rounded-full">Inactive</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick actions */}
+          {!isSelf && (
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => startChat.mutate()}
+                disabled={startChat.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-white text-indigo-700 text-sm font-semibold rounded-xl hover:bg-indigo-50 transition-colors"
+              >
+                <MessageSquare size={14} /> Message
+              </button>
+            </div>
+          )}
         </div>
-      )}
-      {expanded && isManager && emp.is_active && (
-        <button
-          onClick={() => { if (confirm(`Deactivate ${emp.first_name}?`)) deactivate.mutate(); }}
-          className="mt-2 text-xs text-red-500 hover:text-red-700 text-left px-2 py-1 hover:bg-red-50 rounded-md w-full transition-colors"
-        >
-          Deactivate account
-        </button>
-      )}
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-40"><div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+
+              {/* Contact */}
+              <Section title="Contact">
+                <Row icon={<Mail size={14} className="text-gray-400" />} label="Email" value={p.email} />
+                <Row icon={<Phone size={14} className="text-gray-400" />} label="Phone" value={p.phone ?? '—'} />
+                <Row icon={<MapPin size={14} className="text-gray-400" />} label="Address" value={p.address ?? '—'} />
+                {p.reports_to_name && (
+                  <Row icon={<User size={14} className="text-gray-400" />} label="Reports to" value={`${p.reports_to_name}${p.reports_to_job_title ? ` · ${p.reports_to_job_title}` : ''}`} />
+                )}
+                <Row icon={<CalendarDays size={14} className="text-gray-400" />} label="Joined" value={formatDate(p.created_at)} />
+              </Section>
+
+              {/* Identity — admin/manager only */}
+              {isManager && (
+                <Section title="Identity">
+                  <Row icon={<FileText size={14} className="text-gray-400" />} label="NID" value={p.nid ?? '—'} />
+                  {p.nid_url && (
+                    <div className="flex items-start gap-3 py-2.5">
+                      <span className="text-gray-400 mt-0.5 shrink-0"><FileText size={14} /></span>
+                      <div className="flex-1">
+                        <p className="text-xs text-gray-400 mb-1">NID Document</p>
+                        <a href={p.nid_url} target="_blank" rel="noreferrer" className="text-sm text-indigo-600 hover:underline flex items-center gap-1">View NID <ExternalLink size={11} /></a>
+                      </div>
+                    </div>
+                  )}
+                  {p.passport_url && (
+                    <div className="flex items-start gap-3 py-2.5">
+                      <span className="text-gray-400 mt-0.5 shrink-0"><FileText size={14} /></span>
+                      <div className="flex-1">
+                        <p className="text-xs text-gray-400 mb-1">Passport</p>
+                        <a href={p.passport_url} target="_blank" rel="noreferrer" className="text-sm text-indigo-600 hover:underline flex items-center gap-1">View Passport <ExternalLink size={11} /></a>
+                      </div>
+                    </div>
+                  )}
+                </Section>
+              )}
+
+              {/* Banking — admin/manager only */}
+              {isManager && (p.bank_name || p.bank_account_number) && (
+                <Section title="Banking">
+                  <Row icon={<CreditCard size={14} className="text-gray-400" />} label="Bank" value={p.bank_name ?? '—'} />
+                  <Row icon={<CreditCard size={14} className="text-gray-400" />} label="Account name" value={p.bank_account_name ?? '—'} />
+                  <Row icon={<CreditCard size={14} className="text-gray-400" />} label="Account number" value={p.bank_account_number ?? '—'} />
+                </Section>
+              )}
+
+              {/* Emergency contact — admin/manager only */}
+              {isManager && p.emergency_contact_name && (
+                <Section title="Emergency Contact">
+                  <Row icon={<AlertTriangle size={14} className="text-amber-400" />} label="Name" value={p.emergency_contact_name} />
+                  <Row icon={<Phone size={14} className="text-gray-400" />} label="Phone" value={p.emergency_contact_phone ?? '—'} />
+                  <Row icon={<User size={14} className="text-gray-400" />} label="Relation" value={p.emergency_contact_relation ?? '—'} />
+                </Section>
+              )}
+
+              {/* Leave balance — self or manager */}
+              {(isSelf && Object.keys(balanceMap).length > 0) && (
+                <Section title="Leave Balance">
+                  <div className="space-y-2 py-1">
+                    {Object.values(balanceMap).map((b: any) => {
+                      const pct = b.days_allowed > 0 ? (b.days_remaining / b.days_allowed) * 100 : 0;
+                      return (
+                        <div key={b.leave_type}>
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="capitalize text-gray-600 font-medium">{b.leave_type}</span>
+                            <span className={cn('font-semibold', b.days_remaining === 0 ? 'text-red-500' : 'text-gray-700')}>{b.days_remaining} / {b.days_allowed} days</span>
+                          </div>
+                          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className={cn('h-full rounded-full', b.days_remaining === 0 ? 'bg-red-400' : pct > 30 ? 'bg-green-500' : 'bg-amber-400')} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Section>
+              )}
+
+              {/* Danger zone — admin only, not self */}
+              {isManager && !isSelf && p.is_active && (
+                <Section title="Danger Zone">
+                  <button
+                    onClick={() => { if (confirm(`Deactivate ${p.first_name}'s account?`)) deactivate.mutate(); }}
+                    disabled={deactivate.isPending}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 size={14} /> Deactivate account
+                  </button>
+                </Section>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="px-6 py-4">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">{title}</p>
+      <div className="space-y-0.5">{children}</div>
+    </div>
+  );
+}
+
+function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-3 py-2">
+      <span className="mt-0.5 shrink-0">{icon}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-gray-400">{label}</p>
+        <p className="text-sm text-gray-800 break-words">{value}</p>
+      </div>
     </div>
   );
 }
