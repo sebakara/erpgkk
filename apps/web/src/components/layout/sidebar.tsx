@@ -3,14 +3,17 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { cn } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
+import { chatApi } from '@/lib/api';
 import {
-  LayoutDashboard, FolderOpen, Users, Bell, LogOut, Settings,
+  LayoutDashboard, FolderOpen, Users, Bell, LogOut, Settings, MessageSquare,
 } from 'lucide-react';
 
 const ALL_NAV = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'employee'] },
   { label: 'Projects', href: '/projects', icon: FolderOpen, roles: ['admin', 'manager', 'employee'] },
   { label: 'HR', href: '/hr', icon: Users, roles: ['admin', 'manager', 'employee'] },
+  { label: 'Messages', href: '/chat', icon: MessageSquare, roles: ['admin', 'manager', 'employee'] },
   { label: 'Notifications', href: '/notifications', icon: Bell, roles: ['admin', 'manager', 'employee'] },
   { label: 'Settings', href: '/settings', icon: Settings, roles: ['admin', 'manager'] },
 ];
@@ -19,6 +22,14 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
   const nav = ALL_NAV.filter((n) => !user?.role || n.roles.includes(user.role));
+
+  const { data: unreadData } = useQuery({
+    queryKey: ['chat-unread'],
+    queryFn: chatApi.getUnread,
+    refetchInterval: 10000,
+    enabled: !!user,
+  });
+  const chatUnread: number = (unreadData as any)?.count ?? 0;
 
   return (
     <aside className="w-60 bg-[#1e1b4b] flex flex-col text-white shrink-0">
@@ -42,7 +53,12 @@ export function Sidebar() {
                 : 'text-indigo-200 hover:bg-indigo-800 hover:text-white',
             )}>
             <Icon size={17} />
-            {label}
+            <span className="flex-1">{label}</span>
+            {href === '/chat' && chatUnread > 0 && (
+              <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center">
+                {chatUnread > 9 ? '9+' : chatUnread}
+              </span>
+            )}
           </Link>
         ))}
       </nav>
