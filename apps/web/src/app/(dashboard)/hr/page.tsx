@@ -632,7 +632,7 @@ function EmployeeProfileDrawer({ emp, isManager, currentUser, onClose }: { emp: 
 
   const p = profile ?? emp;
   const isSelf = emp.id === currentUser?.id;
-  const canEditAvatar = isSelf || currentUser?.role === 'admin';
+  const canEditAvatar = isSelf;
 
   const balanceMap = (balance as any[]).reduce<Record<string, any>>((acc, b) => {
     if (!acc[b.leave_type]) acc[b.leave_type] = b;
