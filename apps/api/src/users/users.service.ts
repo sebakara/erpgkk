@@ -27,18 +27,22 @@ export class UsersService {
     return this.knex('users as u')
       .where('u.company_id', companyId)
       .leftJoin('departments as d', 'u.department_id', 'd.id')
+      .leftJoin('users as m', 'u.reports_to', 'm.id')
       .select(
         'u.id', 'u.email', 'u.first_name', 'u.last_name', 'u.role',
-        'u.job_title', 'u.avatar_url', 'u.department_id', 'u.is_active',
-        'u.onboarding_completed', 'u.created_at',
+        'u.job_title', 'u.avatar_url', 'u.department_id', 'u.reports_to',
+        'u.is_active', 'u.onboarding_completed', 'u.created_at',
         'd.name as department_name',
+        this.knex.raw("CONCAT(m.first_name, ' ', m.last_name) as reports_to_name"),
+        'm.job_title as reports_to_job_title',
+        'm.avatar_url as reports_to_avatar',
       )
       .orderBy('u.first_name');
   }
 
   async update(id: string, data: Partial<{
     first_name: string; last_name: string; job_title: string;
-    avatar_url: string; department_id: string; role: string; is_active: boolean;
+    avatar_url: string; department_id: string; reports_to: string; role: string; is_active: boolean;
   }>) {
     await this.knex('users').where({ id }).update({ ...data, updated_at: new Date() });
     return this.findById(id);
@@ -58,6 +62,13 @@ export class UsersService {
 
     const company = await this.knex('companies').where({ id: companyId }).first();
 
+    // Look up the dept head to set as the reporting manager
+    let reports_to: string | null = null;
+    if (data.department_id) {
+      const dept = await this.knex('departments').where({ id: data.department_id }).first();
+      reports_to = dept?.manager_id ?? null;
+    }
+
     const id = uuid();
     // Placeholder password — employee sets their own during onboarding
     const password_hash = await bcrypt.hash(uuid(), 10);
@@ -72,6 +83,7 @@ export class UsersService {
       role: data.role ?? 'employee',
       job_title: data.job_title ?? null,
       department_id: data.department_id ?? null,
+      reports_to,
       is_active: false,
       onboarding_completed: false,
     });

@@ -474,6 +474,19 @@ function EmployeesTab({ isManager }: { isManager: boolean }) {
                   </select>
                 </div>
               </div>
+              {addForm.department_id && (() => {
+                const dept = (departments as any[]).find((d) => d.id === addForm.department_id);
+                const head = dept?.manager_name ?? dept?.manager_id;
+                return head ? (
+                  <p className="text-xs text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2 border border-indigo-100">
+                    This employee will report to <strong>{head}</strong> (head of {dept.name}).
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 border border-amber-100">
+                    No head assigned to this department — reporting line will be unset.
+                  </p>
+                );
+              })()}
             </div>
             <div className="flex gap-2 mt-6">
               <button onClick={() => setShowAdd(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">Cancel</button>
@@ -530,6 +543,12 @@ function EmployeeCard({ emp, isManager, isDeptHead }: { emp: any; isManager: boo
           </div>
           {emp.job_title && <p className="text-xs text-gray-500 truncate">{emp.job_title}</p>}
           <p className="text-xs text-gray-400 truncate">{emp.email}</p>
+          {emp.reports_to_name && !isDeptHead && (
+            <p className="text-xs text-indigo-500 truncate mt-0.5 flex items-center gap-1">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v5M2 7l3 2 3-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Reports to {emp.reports_to_name}
+            </p>
+          )}
         </div>
         <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize shrink-0', ROLE_COLOR[emp.role])}>
           {emp.role}
