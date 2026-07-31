@@ -107,6 +107,11 @@ export const usersApi = {
   update: (id: string, data: any) => api.patch(`/users/${id}`, data).then((r) => r.data),
   getInvite: (token: string) => api.get(`/users/onboarding?token=${token}`).then((r) => r.data),
   completeOnboarding: (data: any) => api.post('/users/onboarding', data).then((r) => r.data),
+  uploadOnboardingFile: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/users/onboarding/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
 };
 
 // Leave Packages

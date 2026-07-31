@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usersApi } from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Upload, CheckCircle, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 
 interface InviteInfo {
   id: string;
@@ -15,8 +15,6 @@ interface InviteInfo {
 }
 
 type UploadField = 'passport_url' | 'nid_url';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export default function OnboardingPage() {
   const params = useSearchParams();
@@ -65,11 +63,7 @@ export default function OnboardingPage() {
   const uploadFile = async (file: File, field: UploadField) => {
     setUploading((u) => ({ ...u, [field]: true }));
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch(`${API_BASE}/users/onboarding/upload`, { method: 'POST', body: fd });
-      if (!res.ok) throw new Error('Upload failed');
-      const { url } = await res.json();
+      const { url } = await usersApi.uploadOnboardingFile(file);
       set(field, url);
       toast.success('File uploaded');
     } catch {
