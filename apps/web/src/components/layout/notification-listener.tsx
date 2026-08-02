@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getSocket, disconnectSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth.store';
-import { requestDesktopPermission, desktopNotify } from '@/lib/desktop-notify';
+import { desktopNotify } from '@/lib/desktop-notify';
 import toast from 'react-hot-toast';
 
 const INVALIDATIONS: Record<string, string[][]> = {
@@ -38,10 +38,6 @@ function typeEmoji(type?: string) {
 export function NotificationListener() {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
-
-  useEffect(() => {
-    if (user) requestDesktopPermission();
-  }, [user]);
 
   useEffect(() => {
     if (!user) return;

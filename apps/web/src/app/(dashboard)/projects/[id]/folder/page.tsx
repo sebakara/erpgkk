@@ -65,7 +65,10 @@ export default function FolderPage() {
       qc.invalidateQueries({ queryKey: ['project-files', projectId] });
       toast.success('File uploaded');
     },
-    onError: () => toast.error('Upload failed'),
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Upload failed';
+      toast.error(typeof msg === 'string' ? msg : 'Upload failed');
+    },
   });
 
   const deleteMutation = useMutation({
