@@ -39,11 +39,13 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H 64.225.100.156 >> ~/.ssh/known_hosts
 
-      - name: Sync files to server
+      - name: Prune to production dependencies
+        run: npm prune --omit=dev
+
+      - name: Sync to server
         run: |
           rsync -az --delete \
             --exclude='.git' \
-            --exclude='node_modules' \
             --exclude='apps/api/.env' \
             --exclude='apps/api/.env.*' \
             --exclude='apps/web/.env' \
@@ -52,12 +54,12 @@ jobs:
             --exclude='uploads' \
             ./ root@64.225.100.156:/var/www/erpgkk/
 
-      - name: Install production deps and restart
+      - name: Restart services
         run: |
-          ssh root@64.225.100.156 << 'ENDSSH'
-            set -e
+          ssh root@64.225.100.156 "
+            export NVM_DIR=/root/.nvm
+            source \$NVM_DIR/nvm.sh
             cd /var/www/erpgkk
-            npm install --omit=dev --legacy-peer-deps
             pm2 startOrReload ecosystem.config.js --update-env
             pm2 save
-          ENDSSH
+          "
