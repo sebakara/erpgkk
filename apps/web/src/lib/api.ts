@@ -163,6 +163,20 @@ export const notificationsApi = {
   markAllRead: () => api.patch('/notifications/read-all').then((r) => r.data),
 };
 
+// Project Files
+export const filesApi = {
+  list: (projectId: string) => api.get(`/projects/${projectId}/files`).then((r) => r.data),
+  upload: (projectId: string, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post(`/projects/${projectId}/files`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data);
+  },
+  remove: (projectId: string, fileId: string) =>
+    api.delete(`/projects/${projectId}/files/${fileId}`).then((r) => r.data),
+};
+
 // Chat
 export const chatApi = {
   getConversations: () => api.get('/chat/conversations').then((r) => r.data),
