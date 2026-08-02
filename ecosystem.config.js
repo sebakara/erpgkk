@@ -1,0 +1,25 @@
+module.exports = {
+  apps: [
+    {
+      name: 'gkkerp-api',
+      script: 'dist/main.js',
+      cwd: '/var/www/gkkerp/apps/api',
+      instances: 1,
+      exec_mode: 'fork',
+      env: { NODE_ENV: 'production' },
+      error_file: '/root/.pm2/logs/gkkerp-api-error.log',
+      out_file: '/root/.pm2/logs/gkkerp-api-out.log',
+    },
+    {
+      name: 'gkkerp-web',
+      script: 'node_modules/.bin/next',
+      args: 'start -p 3002',
+      cwd: '/var/www/gkkerp/apps/web',
+      instances: 1,
+      exec_mode: 'fork',
+      env: { NODE_ENV: 'production' },
+      error_file: '/root/.pm2/logs/gkkerp-web-error.log',
+      out_file: '/root/.pm2/logs/gkkerp-web-out.log',
+    },
+  ],
+};
