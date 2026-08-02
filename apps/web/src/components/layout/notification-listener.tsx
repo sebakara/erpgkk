@@ -31,6 +31,10 @@ export function NotificationListener() {
       );
       qc.invalidateQueries({ queryKey: ['notif-count'] });
       qc.invalidateQueries({ queryKey: ['notifications'] });
+      if (notif.type === 'leave_approved' || notif.type === 'leave_rejected') {
+        qc.invalidateQueries({ queryKey: ['leaves'] });
+        qc.invalidateQueries({ queryKey: ['leave-balance'] });
+      }
     };
 
     socket.on('notification', onNotification);
