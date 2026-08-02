@@ -146,10 +146,16 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
         )}
       </div>
 
-      {/* Leave balance summary — visible to everyone */}
-      {Object.keys(balanceMap).length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">My Leave Balance</h2>
+      {/* Leave balance summary — visible to every employee */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="font-semibold text-gray-900 mb-4">My Leave Balance</h2>
+        {Object.keys(balanceMap).length === 0 ? (
+          <div className="text-center py-6 text-gray-400">
+            <Package size={28} className="mx-auto mb-2 opacity-30" />
+            <p className="text-sm font-medium">No leave package assigned yet</p>
+            <p className="text-xs mt-1">Contact HR to get enrolled in a leave package</p>
+          </div>
+        ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {Object.values(balanceMap).map((b) => {
               const exhausted = b.days_remaining === 0;
@@ -175,8 +181,8 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Leave Requests */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -609,10 +615,12 @@ function EmployeeProfileDrawer({ emp, isManager, currentUser, onClose }: { emp: 
     queryFn: () => usersApi.get(emp.id),
   });
 
+  const isSelf = emp.id === currentUser?.id;
+
   const { data: balance = [] } = useQuery<any[]>({
     queryKey: ['employee-balance', emp.id],
-    queryFn: () => leavePackagesApi.myBalance(),
-    enabled: emp.id === currentUser?.id,
+    queryFn: () => isSelf ? leavePackagesApi.myBalance() : leavePackagesApi.balance(emp.id),
+    enabled: isSelf || isManager,
   });
 
   const deactivate = useMutation({
@@ -636,7 +644,6 @@ function EmployeeProfileDrawer({ emp, isManager, currentUser, onClose }: { emp: 
   });
 
   const p = profile ?? emp;
-  const isSelf = emp.id === currentUser?.id;
   const canEditAvatar = isSelf;
 
   const balanceMap = (balance as any[]).reduce<Record<string, any>>((acc, b) => {
@@ -772,25 +779,39 @@ function EmployeeProfileDrawer({ emp, isManager, currentUser, onClose }: { emp: 
                 </Section>
               )}
 
-              {/* Leave balance — self or manager */}
-              {(isSelf && Object.keys(balanceMap).length > 0) && (
-                <Section title="Leave Balance">
-                  <div className="space-y-2 py-1">
-                    {Object.values(balanceMap).map((b: any) => {
-                      const pct = b.days_allowed > 0 ? (b.days_remaining / b.days_allowed) * 100 : 0;
-                      return (
-                        <div key={b.leave_type}>
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="capitalize text-gray-600 font-medium">{b.leave_type}</span>
-                            <span className={cn('font-semibold', b.days_remaining === 0 ? 'text-red-500' : 'text-gray-700')}>{b.days_remaining} / {b.days_allowed} days</span>
+              {/* Leave balance — visible to self and managers */}
+              {(isSelf || isManager) && (
+                <Section title={isSelf ? 'My Leave Balance' : `${p.first_name}'s Leave Balance`}>
+                  {Object.keys(balanceMap).length === 0 ? (
+                    <p className="text-xs text-gray-400 py-1">
+                      {isSelf ? 'No leave package assigned — contact HR to get enrolled.' : 'No active leave package assigned to this employee.'}
+                    </p>
+                  ) : (
+                    <div className="space-y-3 py-1">
+                      {Object.values(balanceMap).map((b: any) => {
+                        const exhausted = b.days_remaining === 0;
+                        const pct = b.days_allowed > 0 ? (b.days_remaining / b.days_allowed) * 100 : 0;
+                        return (
+                          <div key={b.leave_type}>
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="capitalize text-gray-700 font-medium">{b.leave_type}</span>
+                              <span className={cn('font-semibold', exhausted ? 'text-red-500' : 'text-gray-700')}>
+                                {b.days_remaining} / {b.days_allowed} days
+                                {exhausted && <span className="ml-1.5 text-[10px] bg-red-100 text-red-500 px-1.5 py-0.5 rounded">Exhausted</span>}
+                              </span>
+                            </div>
+                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className={cn('h-full rounded-full transition-all', exhausted ? 'bg-red-400' : pct > 30 ? 'bg-green-500' : 'bg-amber-400')}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{b.days_used} used · {b.package_name}</p>
                           </div>
-                          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                            <div className={cn('h-full rounded-full', b.days_remaining === 0 ? 'bg-red-400' : pct > 30 ? 'bg-green-500' : 'bg-amber-400')} style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </Section>
               )}
 
