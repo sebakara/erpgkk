@@ -8,7 +8,7 @@ export function getSocket(): Socket {
     const base = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001';
     socket = io(`${base}/ws`, {
       auth: { token },
-      transports: ['websocket'],
+      transports: ['polling', 'websocket'], // polling first so it works even if WS upgrade fails
       autoConnect: true,
     });
   }
