@@ -22,7 +22,8 @@ export class ReportsService {
 
       this.knex('leave_requests')
         .where({ user_id: userId, company_id: companyId })
-        .whereBetween('start_date', [dateFrom, dateTo])
+        .where('start_date', '<=', dateTo)
+        .where('end_date', '>=', dateFrom)
         .orderBy('start_date', 'desc'),
 
       this.knex('performance_reviews')
@@ -122,7 +123,8 @@ export class ReportsService {
         ? this.knex('leave_requests')
             .whereIn('user_id', employeeIds)
             .where('company_id', companyId)
-            .whereBetween('start_date', [dateFrom, dateTo])
+            .where('start_date', '<=', dateTo)
+            .where('end_date', '>=', dateFrom)
         : [],
       employeeIds.length
         ? this.knex('performance_reviews')
