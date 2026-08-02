@@ -1,8 +1,11 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
+const ReportsPageComponent = dynamic(() => import('./reports/page'), { ssr: false });
+
 import {
-  Plus, Check, X, Search, Users, Star, FileText, Package,
+  Plus, Check, X, Search, Users, Star, FileText, Package, BarChart2,
   ChevronDown, ChevronRight, Building2, Shield, Briefcase, Trash2, Pencil,
   CalendarDays, AlertCircle, Filter, TrendingUp, Award, MessageSquare,
   Phone, Mail, MapPin, CreditCard, AlertTriangle, ExternalLink, User, Camera,
@@ -15,7 +18,7 @@ import { formatDate, cn, getInitials } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import type { LeaveRequest, PerformanceReview, LeavePackage, LeaveBalance } from '@/types';
 
-type Tab = 'overview' | 'employees' | 'leave-packages' | 'performance';
+type Tab = 'overview' | 'employees' | 'leave-packages' | 'performance' | 'reports';
 
 const LEAVE_STATUS_STYLE: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-700',
@@ -35,6 +38,7 @@ export default function HrPage() {
     { key: 'employees', label: 'Employees', icon: <Users size={14} /> },
     { key: 'leave-packages', label: 'Leave Packages', icon: <Package size={14} />, managerOnly: true },
     { key: 'performance', label: 'Performance', icon: <Star size={14} /> },
+    { key: 'reports', label: 'Reports', icon: <BarChart2 size={14} />, managerOnly: true },
   ];
   const tabs = allTabs.filter((t) => !t.managerOnly || isManager);
 
@@ -61,6 +65,7 @@ export default function HrPage() {
       {tab === 'employees' && <EmployeesTab isManager={isManager} currentUser={user} />}
       {tab === 'leave-packages' && <LeavePackagesTab isManager={isManager} />}
       {tab === 'performance' && <PerformanceTab user={user} />}
+      {tab === 'reports' && <ReportsTab />}
     </div>
   );
 }
@@ -1679,4 +1684,8 @@ function Spinner() {
       <div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
     </div>
   );
+}
+
+function ReportsTab() {
+  return <ReportsPageComponent />;
 }
