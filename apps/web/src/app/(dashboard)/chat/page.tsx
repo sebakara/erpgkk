@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { chatApi } from '@/lib/api';
@@ -297,7 +297,7 @@ function ConvItem({ conv, active, onClick, currentUserId }: { conv: any; active:
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export default function ChatPage() {
+function ChatContent() {
   const user = useAuthStore((s) => s.user);
   const searchParams = useSearchParams();
   const [activeConvId, setActiveConvId] = useState<string | null>(searchParams.get('conv'));
@@ -399,5 +399,13 @@ export default function ChatPage() {
 
       {showNew && <NewConvModal onClose={() => setShowNew(false)} onOpen={(id) => setActiveConvId(id)} />}
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense>
+      <ChatContent />
+    </Suspense>
   );
 }

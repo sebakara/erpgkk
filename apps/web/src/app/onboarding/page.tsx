@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usersApi } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -16,7 +16,7 @@ interface InviteInfo {
 
 type UploadField = 'passport_url' | 'nid_url';
 
-export default function OnboardingPage() {
+function OnboardingContent() {
   const params = useSearchParams();
   const router = useRouter();
   const token = params.get('token') ?? '';
@@ -329,5 +329,13 @@ export default function OnboardingPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense>
+      <OnboardingContent />
+    </Suspense>
   );
 }
