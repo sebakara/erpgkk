@@ -13,6 +13,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { DocsModule } from './docs/docs.module';
 import { ChatModule } from './chat/chat.module';
 import { FilesModule } from './files/files.module';
+import { IntegrationsModule } from './integrations/integrations.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { FilesModule } from './files/files.module';
     NotificationsModule,
     ChatModule,
     FilesModule,
+    IntegrationsModule,
   ],
 })
 export class AppModule {}
