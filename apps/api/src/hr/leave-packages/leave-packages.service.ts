@@ -153,7 +153,7 @@ export class LeavePackagesService {
         .where({ user_id: userId, type: row.leave_type, status: 'approved' })
         .where('start_date', '>=', row.period_start)
         .where('end_date', '<=', row.period_end)
-        .sum(this.knex.raw('DATEDIFF(end_date, start_date) + 1 as days'))
+        .select(this.knex.raw('COALESCE(SUM(DATEDIFF(end_date, start_date) + 1), 0) as days'))
         .first()
         .then((r: any) => Number(r?.days ?? 0));
 

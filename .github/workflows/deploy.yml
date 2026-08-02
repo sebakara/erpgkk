@@ -63,3 +63,17 @@ jobs:
             pm2 startOrReload ecosystem.config.js --update-env
             pm2 save
           "
+
+      - name: Ensure Apache WebSocket proxy
+        run: |
+          ssh root@64.225.100.156 "
+            a2enmod proxy proxy_http proxy_wstunnel rewrite 2>/dev/null || true
+            CONFIG=\$(grep -rl 'kazilink.online' /etc/apache2/sites-enabled/ 2>/dev/null | head -1)
+            if [ -n \"\$CONFIG\" ] && ! grep -q 'socket.io' \"\$CONFIG\"; then
+              sed -i 's|</VirtualHost>|  # Socket.IO WebSocket proxy\n  RewriteEngine On\n  RewriteCond %{HTTP:Upgrade} websocket [NC]\n  RewriteCond %{HTTP:Connection} upgrade [NC]\n  RewriteRule ^/socket\\.io/(.*) ws://localhost:3003/socket.io/\$1 [P,L]\n  ProxyPass /socket.io/ http://localhost:3003/socket.io/\n  ProxyPassReverse /socket.io/ http://localhost:3003/socket.io/\n</VirtualHost>|' \"\$CONFIG\"
+              systemctl reload apache2
+              echo \"Apache WebSocket proxy added and reloaded\"
+            else
+              echo \"WebSocket proxy already configured or config not found\"
+            fi
+          "
