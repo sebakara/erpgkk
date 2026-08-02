@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectKnex, Knex } from 'nestjs-knex';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Knex } from 'knex';
+import { KNEX_CONNECTION } from '../database/database.module';
 import { v4 as uuid } from 'uuid';
 
 @Injectable()
 export class FilesService {
-  constructor(@InjectKnex() private knex: Knex) {}
+  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
 
   async findByProject(projectId: string) {
     return this.knex('project_files as f')
