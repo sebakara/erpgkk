@@ -79,11 +79,15 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
   const { data: leaves = [] } = useQuery({
     queryKey: ['leaves', isManager ? 'all' : 'mine'],
     queryFn: isManager ? hrApi.leave.list : hrApi.leave.mine,
+    refetchInterval: 20000,
+    refetchIntervalInBackground: false,
   });
   const { data: announcements = [] } = useQuery({ queryKey: ['announcements'], queryFn: hrApi.announcements.list });
   const { data: balance = [] } = useQuery<LeaveBalance[]>({
     queryKey: ['leave-balance', 'mine'],
     queryFn: leavePackagesApi.myBalance,
+    refetchInterval: 20000,
+    refetchIntervalInBackground: false,
   });
 
   const createLeave = useMutation({
