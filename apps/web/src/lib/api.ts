@@ -163,6 +163,14 @@ export const notificationsApi = {
   markAllRead: () => api.patch('/notifications/read-all').then((r) => r.data),
 };
 
+// HR Reports
+export const reportsApi = {
+  employee: (params: { userId: string; dateFrom: string; dateTo: string }) =>
+    api.get('/hr/reports/employee', { params }).then((r) => r.data),
+  department: (params: { departmentId: string; dateFrom: string; dateTo: string }) =>
+    api.get('/hr/reports/department', { params }).then((r) => r.data),
+};
+
 // Project Files
 export const filesApi = {
   list: (projectId: string) => api.get(`/projects/${projectId}/files`).then((r) => r.data),
