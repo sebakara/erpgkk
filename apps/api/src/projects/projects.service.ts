@@ -29,12 +29,23 @@ export class ProjectsService {
         .orderBy('p.created_at', 'asc');
     }
 
-    // Employee / manager without dept head role: only member projects
+    // Employee: projects they're a member of OR have issues assigned to them
     return this.knex('projects as p')
-      .join('project_members as pm', 'p.id', 'pm.project_id')
       .where('p.company_id', companyId)
-      .andWhere('pm.user_id', userId)
-      .select('p.*', 'pm.role as member_role')
+      .where((builder) => {
+        builder
+          .whereExists(
+            this.knex('project_members as pm')
+              .whereRaw('pm.project_id = p.id')
+              .where('pm.user_id', userId),
+          )
+          .orWhereExists(
+            this.knex('issues as i')
+              .whereRaw('i.project_id = p.id')
+              .where('i.assignee_id', userId),
+          );
+      })
+      .select('p.*')
       .orderBy('p.created_at', 'asc');
   }
 
