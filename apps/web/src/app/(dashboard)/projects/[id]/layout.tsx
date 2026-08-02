@@ -3,7 +3,7 @@ import { useParams, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { projectsApi, sprintsApi } from '@/lib/api';
 import Link from 'next/link';
-import { LayoutGrid, ListTodo, FileText, BarChart2, Settings, CircleDot, Layers } from 'lucide-react';
+import { LayoutGrid, ListTodo, FileText, BarChart2, Settings, CircleDot, FolderOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const TABS = [
@@ -11,6 +11,7 @@ const TABS = [
   { label: 'Board',     segment: 'board',     icon: LayoutGrid },
   { label: 'Backlog',   segment: 'backlog',   icon: ListTodo   },
   { label: 'Docs',      segment: 'docs',      icon: FileText   },
+  { label: 'Folder',    segment: 'folder',    icon: FolderOpen },
   { label: 'Analytics', segment: 'analytics', icon: BarChart2  },
   { label: 'Settings',  segment: 'settings',  icon: Settings   },
 ];
