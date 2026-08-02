@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 const ReportsPageComponent = dynamic(() => import('./reports/page'), { ssr: false });
@@ -12,9 +12,9 @@ import {
 } from 'lucide-react';
 import { hrApi, usersApi, departmentsApi, performanceApi, leavePackagesApi, chatApi } from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import { useRef } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate, cn, getInitials } from '@/lib/utils';
+import { desktopNotify } from '@/lib/desktop-notify';
 import toast from 'react-hot-toast';
 import type { LeaveRequest, PerformanceReview, LeavePackage, LeaveBalance } from '@/types';
 
@@ -82,6 +82,26 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
     refetchInterval: 20000,
     refetchIntervalInBackground: false,
   });
+
+  // Detect status changes from polling and fire desktop notifications
+  const prevLeavesRef = useRef<LeaveRequest[]>([]);
+  useEffect(() => {
+    const prev = prevLeavesRef.current;
+    if (prev.length > 0) {
+      (leaves as LeaveRequest[]).forEach((leave) => {
+        const old = prev.find((p) => p.id === leave.id);
+        if (old && old.status === 'pending' && leave.status !== 'pending') {
+          desktopNotify(
+            leave.status === 'approved' ? 'Leave Approved ✅' : 'Leave Rejected ❌',
+            `Your ${leave.type} leave request has been ${leave.status}`,
+            `leave_${leave.status}`,
+          );
+        }
+      });
+    }
+    prevLeavesRef.current = leaves as LeaveRequest[];
+  }, [leaves]);
+
   const { data: announcements = [] } = useQuery({ queryKey: ['announcements'], queryFn: hrApi.announcements.list });
   const { data: balance = [] } = useQuery<LeaveBalance[]>({
     queryKey: ['leave-balance', 'mine'],
