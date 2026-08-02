@@ -50,13 +50,13 @@ jobs:
             --exclude='apps/web/.env.*' \
             --exclude='apps/web/.next/cache' \
             --exclude='uploads' \
-            ./ root@64.225.100.156:/var/www/gkkerp/
+            ./ root@64.225.100.156:/var/www/erpgkk/
 
       - name: Install production deps and restart
         run: |
           ssh root@64.225.100.156 << 'ENDSSH'
             set -e
-            cd /var/www/gkkerp
+            cd /var/www/erpgkk
             npm install --omit=dev --legacy-peer-deps
             pm2 startOrReload ecosystem.config.js --update-env
             pm2 save
