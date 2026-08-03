@@ -4,7 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { join, resolve } from 'path';
-import { mkdirSync } from 'fs';
+import { mkdirSync, readdirSync } from 'fs';
 import knex from 'knex';
 import * as dotenv from 'dotenv';
 
@@ -20,14 +20,42 @@ async function runMigrations() {
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASSWORD || 'secret',
     },
-    migrations: {
-      directory: resolve(__dirname, 'database/migrations'),
-    },
   });
   try {
-    const [batch, files] = await db.migrate.latest();
-    if (files.length) console.log(`Migrations: batch ${batch}, ran ${files.length} file(s)`);
-    else console.log('Migrations: already up to date');
+    // Ensure tracking tables exist
+    if (!(await db.schema.hasTable('knex_migrations'))) {
+      await db.schema.createTable('knex_migrations', (t) => {
+        t.increments('id');
+        t.string('name');
+        t.integer('batch');
+        t.timestamp('migration_time').defaultTo(db.fn.now());
+      });
+    }
+    if (!(await db.schema.hasTable('knex_migrations_lock'))) {
+      await db.schema.createTable('knex_migrations_lock', (t) => {
+        t.integer('index').primary();
+        t.integer('is_locked');
+      });
+      await db('knex_migrations_lock').insert({ index: 1, is_locked: 0 });
+    }
+
+    const completed: string[] = await db('knex_migrations').pluck('name');
+    const migrationsDir = resolve(__dirname, 'database', 'migrations');
+    const files = readdirSync(migrationsDir).filter((f) => f.endsWith('.js')).sort();
+
+    const batchResult = await db('knex_migrations').max('batch as m');
+    const batch = ((batchResult[0] as any).m ?? 0) + 1;
+
+    for (const file of files) {
+      if (!completed.includes(file)) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const migration = require(join(migrationsDir, file));
+        await migration.up(db);
+        await db('knex_migrations').insert({ name: file, batch, migration_time: new Date() });
+        console.log(`Migration ran: ${file}`);
+      }
+    }
+    console.log('Migrations: up to date');
   } finally {
     await db.destroy();
   }
