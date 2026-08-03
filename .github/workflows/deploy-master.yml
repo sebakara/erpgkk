@@ -71,6 +71,9 @@ jobs:
           ssh root@109.199.96.234 '
             set -e
 
+            # Fix Git dubious ownership if someone runs git commands on the server
+            git config --global --add safe.directory /var/www/erpgkk 2>/dev/null || true
+
             # Ensure uploads directory exists
             mkdir -p /var/www/erpgkk/uploads
 
