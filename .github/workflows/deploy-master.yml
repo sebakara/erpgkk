@@ -41,7 +41,7 @@ jobs:
           fi
           echo "$SSH_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          printf 'Host 109.199.96.234\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  IdentityFile ~/.ssh/id_rsa\n' > ~/.ssh/config
+          printf 'Host 109.199.96.234\n  Port 2245\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  IdentityFile ~/.ssh/id_rsa\n' > ~/.ssh/config
           chmod 600 ~/.ssh/config
         env:
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY_PROD }}
