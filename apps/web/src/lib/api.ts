@@ -8,6 +8,8 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // Let the browser set Content-Type (with boundary) for multipart uploads
+  if (config.data instanceof FormData) delete config.headers['Content-Type'];
   return config;
 });
 
