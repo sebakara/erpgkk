@@ -19,7 +19,7 @@ async function main() {
 
   try {
     const hash = await bcrypt.hash('12345678', 12);
-    const count = await db('users').whereNull('deleted_at').update({ password_hash: hash });
+    const count = await db('users').update({ password_hash: hash });
     console.log(`✓ Updated password for ${count} user(s) → 12345678`);
   } finally {
     await db.destroy();
