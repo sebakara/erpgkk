@@ -26,6 +26,12 @@ require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const knexLib  = require('knex');
 const { v4: uuid } = require('uuid');
+const fs = require('fs');
+
+// Full project descriptions extracted from kwikerpnw.sql (keyed by src_id as string)
+const PROJECT_DESCRIPTIONS = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, 'projects-descriptions.json'), 'utf8')
+);
 
 // ── Company ──────────────────────────────────────────────────────────────────
 
@@ -258,30 +264,30 @@ const SRC_WORK_LOCATIONS = [
 // ── Projects ──────────────────────────────────────────────────────────────────
 
 const SRC_PROJECTS = [
-  { src_id:  1, name: 'KWIK DRIVE',                                          description: 'Connect drivers with their passengers.'                                                },
-  { src_id:  2, name: 'Kwik Senda',                                          description: 'Peer-to-peer international package delivery — connects senders with travelers.'       },
-  { src_id:  3, name: 'Kwik Ride Dashboard',                                 description: 'Dashboard to control and visualise all Kwik Ride operations.'                       },
-  { src_id:  4, name: 'Rwanda Trauma Registry',                              description: 'Tracking trauma cases across Rwanda.'                                               },
-  { src_id:  5, name: 'Kwik Ride Mobile',                                    description: ''                                                                                   },
-  { src_id:  6, name: 'Kwik Ride',                                           description: 'Kwik Ride platform.'                                                               },
-  { src_id:  7, name: 'Kwik Ride Mobile v2',                                 description: ''                                                                                   },
-  { src_id:  8, name: 'SfH-EMR',                                             description: 'EMR System Enhancement Project to digitise healthcare workflows.'                   },
-  { src_id:  9, name: 'NHIC Public Portal',                                  description: 'Public-facing portal for the National Health Insurance Commission.'                 },
-  { src_id: 10, name: 'Centralized Teleradiology Platform (DICOM)',          description: "Rwanda's centralised teleradiology platform for DICOM image management."            },
-  { src_id: 11, name: 'Mosquito DB (VectorScope)',                           description: "Rwanda's nationally owned vector-surveillance platform."                            },
-  { src_id: 12, name: 'Rwanda Health Insurance Portal (RHIP)',               description: 'National Insurance Operations Hub.'                                                },
-  { src_id: 13, name: 'National Hygiene & Inspection Portal (NHIP)',         description: 'Hygiene and food-safety inspection management platform.'                           },
-  { src_id: 14, name: 'HEC Foreign Qualification Equivalency MIS',          description: 'Platform for processing foreign qualification equivalency applications.'             },
-  { src_id: 15, name: 'Rwanda Health Council Connect (RHCC)',                description: 'National Healthcare Professional Credentialing platform.'                          },
-  { src_id: 16, name: 'Real-Time Data Ingestion — NHIC Data Warehouse',     description: 'Pipeline for real-time data ingestion into the NHIC data warehouse.'               },
-  { src_id: 17, name: 'New Infrastructure Documentation & Migration Prep',   description: 'Documentation and preparation for RSA migration strategy.'                         },
-  { src_id: 18, name: 'Data Governance Measures — Implementation & Monitor', description: 'Built-in governance at the infrastructure layer.'                                  },
-  { src_id: 19, name: 'Monthly User Access Audit & Monitoring Dashboard',    description: 'Proactive security and performance oversight reporting.'                           },
-  { src_id: 20, name: 'Platform Tooling Expansion for Data Scientists',      description: 'Secure, centrally managed analytics platform for data scientists and analysts.'    },
-  { src_id: 21, name: 'GKK Fellowship Program',                              description: 'GKK Fellowship Program for talent development.'                                   },
-  { src_id: 22, name: 'HEC Accreditation',                                   description: 'Helping HEC with accreditation processes.'                                       },
-  { src_id: 23, name: 'e-Buzima',                                            description: 'Electronic health platform.'                                                      },
-  { src_id: 24, name: 'Kwik Social',                                         description: 'Social platform by KwikKoders.'                                                   },
+  { src_id:  1, name: 'KWIK DRIVE'                                          },
+  { src_id:  2, name: 'Kwik Senda'                                          },
+  { src_id:  3, name: 'Kwik Ride Dashboard'                                 },
+  { src_id:  4, name: 'Rwanda Trauma Registry'                              },
+  { src_id:  5, name: 'Kwik Ride Mobile'                                    },
+  { src_id:  6, name: 'Kwik Ride'                                           },
+  { src_id:  7, name: 'Kwik Ride Mobile v2'                                 },
+  { src_id:  8, name: 'SfH-EMR'                                             },
+  { src_id:  9, name: 'NHIC Public Portal'                                  },
+  { src_id: 10, name: 'Centralized Teleradiology Platform (DICOM)'          },
+  { src_id: 11, name: 'Mosquito DB (VectorScope)'                           },
+  { src_id: 12, name: 'Rwanda Health Insurance Portal (RHIP)'               },
+  { src_id: 13, name: 'National Hygiene & Inspection Portal (NHIP)'         },
+  { src_id: 14, name: 'HEC Foreign Qualification Equivalency MIS'           },
+  { src_id: 15, name: 'Rwanda Health Council Connect (RHCC)'                },
+  { src_id: 16, name: 'Real-Time Data Ingestion — NHIC Data Warehouse'      },
+  { src_id: 17, name: 'New Infrastructure Documentation & Migration Prep'   },
+  { src_id: 18, name: 'Data Governance Measures — Implementation & Monitor' },
+  { src_id: 19, name: 'Monthly User Access Audit & Monitoring Dashboard'    },
+  { src_id: 20, name: 'Platform Tooling Expansion for Data Scientists'      },
+  { src_id: 21, name: 'GKK Fellowship Program'                              },
+  { src_id: 22, name: 'HEC Accreditation'                                   },
+  { src_id: 23, name: 'e-Buzima'                                            },
+  { src_id: 24, name: 'Kwik Social'                                         },
 ];
 
 const COLORS = [
@@ -442,13 +448,21 @@ async function main() {
       let row = await db('projects').where({ company_id: companyId, name: p.name }).first();
       if (row) {
         projIdMap.set(p.src_id, row.id);
-        console.log(`  EXIST  ${p.name}`);
+        // Patch description if it was previously empty
+        const desc = PROJECT_DESCRIPTIONS[String(p.src_id)] || null;
+        if (desc && !row.description) {
+          await db('projects').where({ id: row.id }).update({ description: desc });
+          console.log(`  PATCH  ${p.name} (description added)`);
+        } else {
+          console.log(`  EXIST  ${p.name}`);
+        }
         continue;
       }
       const id = uuid();
+      const desc = PROJECT_DESCRIPTIONS[String(p.src_id)] || null;
       await db('projects').insert({
         id, company_id: companyId, owner_id: ownerId,
-        name: p.name, description: p.description || null,
+        name: p.name, description: desc || null,
         status: 'active', color: COLORS[i % COLORS.length],
       });
       await db('project_members').insert({ id: uuid(), project_id: id, user_id: ownerId, role: 'owner' });
