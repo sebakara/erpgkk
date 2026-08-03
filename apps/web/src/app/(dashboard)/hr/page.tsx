@@ -443,6 +443,7 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
           <option value="all">All Roles</option>
           <option value="admin">Admin</option>
           <option value="manager">Manager</option>
+          <option value="hr">HR</option>
           <option value="employee">Employee</option>
         </select>
         </>}
@@ -532,6 +533,7 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none">
                     <option value="employee">Employee</option>
                     <option value="manager">Manager</option>
+                    <option value="hr">HR</option>
                     <option value="admin">Admin</option>
                   </select>
                 </div>
