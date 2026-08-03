@@ -14,6 +14,7 @@ export class IssuesService {
   findAll(projectId: string, sprintId?: string, userId?: string, userRole?: string) {
     const q = this.knex('issues as i')
       .where('i.project_id', projectId)
+      .whereNull('i.deleted_at')
       .leftJoin('users as a', 'i.assignee_id', 'a.id')
       .leftJoin('users as r', 'i.reporter_id', 'r.id')
       .select(
@@ -29,7 +30,7 @@ export class IssuesService {
   }
 
   backlog(projectId: string, userId?: string, userRole?: string) {
-    const q = this.knex('issues').where({ project_id: projectId }).whereNull('sprint_id').orderBy('position');
+    const q = this.knex('issues').where({ project_id: projectId }).whereNull('sprint_id').whereNull('deleted_at').orderBy('position');
     if (userRole === 'employee' && userId) q.where('assignee_id', userId);
     return q;
   }
@@ -37,6 +38,7 @@ export class IssuesService {
   async findById(id: string) {
     const issue = await this.knex('issues as i')
       .where('i.id', id)
+      .whereNull('i.deleted_at')
       .leftJoin('users as a', 'i.assignee_id', 'a.id')
       .leftJoin('users as r', 'i.reporter_id', 'r.id')
       .select('i.*',
@@ -144,6 +146,6 @@ export class IssuesService {
   }
 
   remove(id: string) {
-    return this.knex('issues').where({ id }).delete();
+    return this.knex('issues').where({ id }).update({ deleted_at: new Date() });
   }
 }

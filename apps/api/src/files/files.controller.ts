@@ -67,10 +67,7 @@ export class FilesController {
     @Param('projectId') projectId: string,
     @Param('fileId') fileId: string,
   ) {
-    const result = await this.filesService.remove(fileId, projectId);
-    try {
-      await unlink(join(process.cwd(), 'uploads', result.stored_name));
-    } catch { /* file already gone */ }
+    await this.filesService.remove(fileId, projectId);
     return { deleted: true };
   }
 }

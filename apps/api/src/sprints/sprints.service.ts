@@ -8,11 +8,11 @@ export class SprintsService {
   constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
 
   findAll(projectId: string) {
-    return this.knex('sprints').where({ project_id: projectId }).orderBy('created_at', 'desc');
+    return this.knex('sprints').where({ project_id: projectId }).whereNull('deleted_at').orderBy('created_at', 'desc');
   }
 
   async findById(id: string) {
-    const sprint = await this.knex('sprints').where({ id }).first();
+    const sprint = await this.knex('sprints').where({ id }).whereNull('deleted_at').first();
     if (!sprint) throw new NotFoundException('Sprint not found');
     return sprint;
   }
@@ -38,6 +38,6 @@ export class SprintsService {
   }
 
   remove(id: string) {
-    return this.knex('sprints').where({ id }).delete();
+    return this.knex('sprints').where({ id }).update({ deleted_at: new Date() });
   }
 }
