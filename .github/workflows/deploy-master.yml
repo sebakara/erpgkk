@@ -42,7 +42,7 @@ jobs:
       - name: Prune to production dependencies
         run: npm prune --omit=dev
 
-      - name: Sync to server
+      - name: Sync app to server
         run: |
           rsync -az --delete \
             --exclude='.git' \
@@ -54,93 +54,34 @@ jobs:
             --exclude='uploads' \
             ./ root@109.199.96.234:/var/www/erpgkk/
 
-      - name: Bootstrap server & restart services
+      - name: Install Nginx config
         run: |
-          ssh root@109.199.96.234 "
+          scp deploy/nginx/ops.kwikkoders.com \
+            root@109.199.96.234:/etc/nginx/sites-available/ops.kwikkoders.com
+
+      - name: Bootstrap server and restart services
+        run: |
+          ssh root@109.199.96.234 '
             set -e
 
-            # ── Ensure uploads directory exists ──────────────────────
+            # Ensure uploads directory exists
             mkdir -p /var/www/erpgkk/uploads
-            chown -R www-data:www-data /var/www/erpgkk/uploads 2>/dev/null || true
 
-            # ── Install PM2 globally if missing ─────────────────────
-            if ! command -v pm2 &>/dev/null; then
+            # Install PM2 globally if missing
+            if ! command -v pm2 >/dev/null 2>&1; then
               npm install -g pm2
             fi
 
-            # ── Start / reload apps ──────────────────────────────────
+            # Enable Nginx site and reload
+            ln -sf /etc/nginx/sites-available/ops.kwikkoders.com \
+                   /etc/nginx/sites-enabled/ops.kwikkoders.com
+            nginx -t && systemctl reload nginx
+
+            # Start / reload app processes
             cd /var/www/erpgkk
             pm2 startOrReload ecosystem.config.js --update-env
             pm2 save
             pm2 startup systemd -u root --hp /root 2>/dev/null || true
 
-            # ── Write Nginx site config ──────────────────────────────
-            cat > /etc/nginx/sites-available/ops.kwikkoders.com <<'NGINX'
-server {
-    listen 80;
-    server_name ops.kwikkoders.com;
-
-    # Redirect HTTP → HTTPS (certbot will fill this in after cert issuance)
-    return 301 https://\$host\$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name ops.kwikkoders.com;
-
-    # SSL — filled in by certbot
-    ssl_certificate     /etc/letsencrypt/live/ops.kwikkoders.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/ops.kwikkoders.com/privkey.pem;
-    include             /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
-
-    # File uploads (served directly from disk)
-    location /uploads/ {
-        alias /var/www/erpgkk/uploads/;
-        expires 30d;
-        add_header Cache-Control \"public, immutable\";
-    }
-
-    # Socket.IO — must come before the /api/ and / blocks
-    location /socket.io/ {
-        proxy_pass         http://localhost:3003/socket.io/;
-        proxy_http_version 1.1;
-        proxy_set_header   Upgrade \$http_upgrade;
-        proxy_set_header   Connection \"upgrade\";
-        proxy_set_header   Host \$host;
-        proxy_set_header   X-Real-IP \$remote_addr;
-        proxy_cache_bypass \$http_upgrade;
-    }
-
-    # API
-    location /api/ {
-        proxy_pass         http://localhost:3003/;
-        proxy_http_version 1.1;
-        proxy_set_header   Host \$host;
-        proxy_set_header   X-Real-IP \$remote_addr;
-        proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 120s;
-        client_max_body_size 25M;
-    }
-
-    # Next.js frontend
-    location / {
-        proxy_pass         http://localhost:3002;
-        proxy_http_version 1.1;
-        proxy_set_header   Host \$host;
-        proxy_set_header   X-Real-IP \$remote_addr;
-        proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 120s;
-    }
-}
-NGINX
-
-            # Enable site and reload Nginx
-            ln -sf /etc/nginx/sites-available/ops.kwikkoders.com \
-                   /etc/nginx/sites-enabled/ops.kwikkoders.com
-            nginx -t && systemctl reload nginx
-
-            echo '✓ Deploy complete'
-          "
+            echo "Deploy complete"
+          '
