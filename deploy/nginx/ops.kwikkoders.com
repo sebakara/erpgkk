@@ -33,7 +33,7 @@ server {
 
     # NestJS API
     location /api/ {
-        proxy_pass         http://localhost:3003/;
+        proxy_pass         http://localhost:3003;
         proxy_http_version 1.1;
         proxy_set_header   Host $host;
         proxy_set_header   X-Real-IP $remote_addr;
