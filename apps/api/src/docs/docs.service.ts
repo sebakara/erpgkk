@@ -10,6 +10,7 @@ export class DocsService {
   findAll(projectId: string) {
     return this.knex('docs as d')
       .where('d.project_id', projectId)
+      .whereNull('d.deleted_at')
       .join('users as u', 'd.author_id', 'u.id')
       .select('d.id', 'd.title', 'd.version', 'd.created_at', 'd.updated_at',
         this.knex.raw("CONCAT(u.first_name, ' ', u.last_name) as author_name"))
@@ -17,7 +18,7 @@ export class DocsService {
   }
 
   async findById(id: string) {
-    const doc = await this.knex('docs').where({ id }).first();
+    const doc = await this.knex('docs').where({ id }).whereNull('deleted_at').first();
     if (!doc) throw new NotFoundException('Doc not found');
     return doc;
   }
@@ -34,6 +35,6 @@ export class DocsService {
   }
 
   remove(id: string) {
-    return this.knex('docs').where({ id }).delete();
+    return this.knex('docs').where({ id }).update({ deleted_at: new Date() });
   }
 }

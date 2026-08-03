@@ -10,6 +10,7 @@ export class DepartmentsService {
   findAll(companyId: string) {
     return this.knex('departments as d')
       .where('d.company_id', companyId)
+      .whereNull('d.deleted_at')
       .leftJoin('users as m', 'd.manager_id', 'm.id')
       .select(
         'd.*',
@@ -18,7 +19,7 @@ export class DepartmentsService {
   }
 
   findById(id: string, companyId: string) {
-    return this.knex('departments').where({ id, company_id: companyId }).first();
+    return this.knex('departments').where({ id, company_id: companyId }).whereNull('deleted_at').first();
   }
 
   async create(companyId: string, data: { name: string; manager_id?: string }) {
@@ -33,6 +34,6 @@ export class DepartmentsService {
   }
 
   remove(id: string, companyId: string) {
-    return this.knex('departments').where({ id, company_id: companyId }).delete();
+    return this.knex('departments').where({ id, company_id: companyId }).update({ deleted_at: new Date() });
   }
 }

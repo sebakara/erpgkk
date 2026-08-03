@@ -14,6 +14,7 @@ export class LeavePackagesService {
   async findAll(companyId: string) {
     const packages = await this.knex('leave_packages as lp')
       .where('lp.company_id', companyId)
+      .whereNull('lp.deleted_at')
       .leftJoin('users as u', 'lp.created_by', 'u.id')
       .select(
         'lp.*',
@@ -82,7 +83,7 @@ export class LeavePackagesService {
   }
 
   async remove(id: string) {
-    await this.knex('leave_packages').where({ id }).delete();
+    await this.knex('leave_packages').where({ id }).update({ deleted_at: new Date() });
   }
 
   // Allocate to one, many, or all employees

@@ -10,6 +10,7 @@ export class AnnouncementsService {
   findAll(companyId: string) {
     return this.knex('announcements as a')
       .where('a.company_id', companyId)
+      .whereNull('a.deleted_at')
       .join('users as u', 'a.author_id', 'u.id')
       .select('a.*', this.knex.raw("CONCAT(u.first_name, ' ', u.last_name) as author_name"), 'u.avatar_url as author_avatar')
       .orderBy('a.is_pinned', 'desc')
@@ -27,6 +28,6 @@ export class AnnouncementsService {
   }
 
   remove(id: string, companyId: string) {
-    return this.knex('announcements').where({ id, company_id: companyId }).delete();
+    return this.knex('announcements').where({ id, company_id: companyId }).update({ deleted_at: new Date() });
   }
 }

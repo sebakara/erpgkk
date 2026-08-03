@@ -19,6 +19,7 @@ export class PerformanceService {
   ) {
     const q = this.knex('performance_reviews as pr')
       .where('pr.company_id', companyId)
+      .whereNull('pr.deleted_at')
       .leftJoin('users as reviewer', 'pr.reviewer_id', 'reviewer.id')
       .leftJoin('users as reviewee', 'pr.reviewee_id', 'reviewee.id')
       .leftJoin('departments as d', 'reviewee.department_id', 'd.id')
@@ -160,6 +161,6 @@ export class PerformanceService {
   }
 
   remove(id: string) {
-    return this.knex('performance_reviews').where({ id }).delete();
+    return this.knex('performance_reviews').where({ id }).update({ deleted_at: new Date() });
   }
 }

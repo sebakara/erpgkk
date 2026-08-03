@@ -10,6 +10,7 @@ export class FilesService {
   async findByProject(projectId: string) {
     return this.knex('project_files as f')
       .where('f.project_id', projectId)
+      .whereNull('f.deleted_at')
       .leftJoin('users as u', 'f.uploaded_by', 'u.id')
       .select(
         'f.*',
@@ -38,9 +39,9 @@ export class FilesService {
   }
 
   async remove(fileId: string, projectId: string) {
-    const file = await this.knex('project_files').where({ id: fileId, project_id: projectId }).first();
+    const file = await this.knex('project_files').where({ id: fileId, project_id: projectId }).whereNull('deleted_at').first();
     if (!file) throw new NotFoundException('File not found');
-    await this.knex('project_files').where('id', fileId).delete();
+    await this.knex('project_files').where('id', fileId).update({ deleted_at: new Date() });
     return { deleted: true, stored_name: file.stored_name };
   }
 }

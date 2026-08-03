@@ -11,6 +11,7 @@ export class ProjectsService {
     if (userRole === 'admin') {
       return this.knex('projects as p')
         .where('p.company_id', companyId)
+        .whereNull('p.deleted_at')
         .select('p.*')
         .orderBy('p.created_at', 'asc');
     }
@@ -24,14 +25,16 @@ export class ProjectsService {
       // Dept head: all projects in their department(s)
       return this.knex('projects as p')
         .where('p.company_id', companyId)
+        .whereNull('p.deleted_at')
         .whereIn('p.department_id', managedDepts)
         .select('p.*')
         .orderBy('p.created_at', 'asc');
     }
 
-    // Employee: projects they're a member of OR have issues assigned to them
+    // Employee/HR: projects they're a member of OR have issues assigned to them
     return this.knex('projects as p')
       .where('p.company_id', companyId)
+      .whereNull('p.deleted_at')
       .where((builder) => {
         builder
           .whereExists(
@@ -50,7 +53,7 @@ export class ProjectsService {
   }
 
   async findById(id: string, companyId: string) {
-    const project = await this.knex('projects').where({ id, company_id: companyId }).first();
+    const project = await this.knex('projects').where({ id, company_id: companyId }).whereNull('deleted_at').first();
     if (!project) throw new NotFoundException('Project not found');
     const members = await this.knex('project_members as pm')
       .join('users as u', 'pm.user_id', 'u.id')
@@ -83,7 +86,7 @@ export class ProjectsService {
   }
 
   remove(id: string, companyId: string) {
-    return this.knex('projects').where({ id, company_id: companyId }).delete();
+    return this.knex('projects').where({ id, company_id: companyId }).update({ deleted_at: new Date() });
   }
 
   async analytics(id: string) {
