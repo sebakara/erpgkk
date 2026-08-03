@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, ForbiddenException } from '@nestjs/common';
 import { Knex } from 'knex';
 import { v4 as uuid } from 'uuid';
 import { KNEX_CONNECTION } from '../database/database.module';
@@ -129,7 +129,25 @@ export class ChatService {
     return { id };
   }
 
-  async getMessages(convId: string) {
+  async getMessages(convId: string, userId: string, departmentId: string | null, role: string) {
+    const conv = await this.knex('chat_conversations').where('id', convId).first();
+    if (!conv) throw new ForbiddenException();
+
+    if (role === 'admin') {
+      // admin sees all
+    } else if (conv.type === 'direct') {
+      const member = await this.knex('chat_conversation_members')
+        .where({ conversation_id: convId, user_id: userId })
+        .first();
+      if (!member) throw new ForbiddenException('You are not a member of this conversation');
+    } else if (conv.type === 'department') {
+      const managedIds = await this.knex('departments').where('manager_id', userId).pluck('id');
+      const allowed = [departmentId, ...managedIds].filter(Boolean);
+      if (!allowed.includes(conv.department_id)) {
+        throw new ForbiddenException('You do not belong to this department');
+      }
+    }
+
     return this.knex('chat_messages as m')
       .join('users as u', 'm.sender_id', 'u.id')
       .where('m.conversation_id', convId)

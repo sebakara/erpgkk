@@ -12,7 +12,7 @@ export class LeaveController {
   constructor(private leaveService: LeaveService) {}
 
   @Get()
-  @Roles(Role.Admin, Role.Manager)
+  @Roles(Role.Admin, Role.Manager, Role.Hr)
   findAll(@CurrentUser() user: any, @Query('userId') userId?: string) {
     return this.leaveService.findAll(user.company_id, userId);
   }
@@ -23,7 +23,7 @@ export class LeaveController {
   }
 
   @Get('summary')
-  @Roles(Role.Admin, Role.Manager)
+  @Roles(Role.Admin, Role.Manager, Role.Hr)
   summary(@CurrentUser() user: any) {
     return this.leaveService.summary(user.company_id);
   }
@@ -39,13 +39,13 @@ export class LeaveController {
   }
 
   @Patch(':id/approve')
-  @Roles(Role.Admin, Role.Manager)
+  @Roles(Role.Admin, Role.Manager, Role.Hr)
   approve(@Param('id') id: string, @CurrentUser() user: any, @Body() body: { note?: string }) {
     return this.leaveService.approve(id, user.id, body.note);
   }
 
   @Patch(':id/reject')
-  @Roles(Role.Admin, Role.Manager)
+  @Roles(Role.Admin, Role.Manager, Role.Hr)
   reject(@Param('id') id: string, @CurrentUser() user: any, @Body() body: { note?: string }) {
     return this.leaveService.reject(id, user.id, body.note);
   }

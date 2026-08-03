@@ -11,7 +11,10 @@ import { mkdirSync } from 'fs';
 import { ConfigService } from '@nestjs/config';
 import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Role } from '../common/enums';
 
 const uploadsDir = join(process.cwd(), 'uploads');
 // Ensure the directory exists when the module loads
@@ -33,6 +36,8 @@ export class FilesController {
   }
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin, Role.Manager, Role.Employee)
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({
       destination: (_req, _file, cb) => {
