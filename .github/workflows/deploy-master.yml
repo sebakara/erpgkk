@@ -35,9 +35,16 @@ jobs:
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY_PROD }}" > ~/.ssh/id_rsa
+          if [ -z "$SSH_KEY" ]; then
+            echo "ERROR: SSH_PRIVATE_KEY_PROD secret is not set in GitHub repository secrets."
+            exit 1
+          fi
+          echo "$SSH_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H 109.199.96.234 >> ~/.ssh/known_hosts
+          printf 'Host 109.199.96.234\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  IdentityFile ~/.ssh/id_rsa\n' > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY_PROD }}
 
       - name: Prune to production dependencies
         run: npm prune --omit=dev
