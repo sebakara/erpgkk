@@ -66,7 +66,7 @@ export class UsersController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Post()
-  @Roles(Role.Admin, Role.Manager)
+  @Roles(Role.Admin, Role.Manager, Role.Hr)
   createEmployee(@CurrentUser() user: any, @Body() body: any) {
     return this.usersService.createEmployee(user.company_id, body);
   }
