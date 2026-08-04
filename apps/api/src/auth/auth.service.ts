@@ -1,13 +1,16 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
 import { UsersService } from '../users/users.service';
 import { Inject } from '@nestjs/common';
 import { KNEX_CONNECTION } from '../database/database.module';
+import { ConfigService } from '@nestjs/config';
 import { Knex } from 'knex';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { MailService } from '../common/services/mail.service';
 
 @Injectable()
 export class AuthService {
@@ -15,6 +18,8 @@ export class AuthService {
     @Inject(KNEX_CONNECTION) private readonly knex: Knex,
     private usersService: UsersService,
     private jwtService: JwtService,
+    private config: ConfigService,
+    private mailService: MailService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -68,6 +73,49 @@ export class AuthService {
     const password_hash = await bcrypt.hash(newPassword, 10);
     await this.knex('users').where({ id: userId }).update({ password_hash, updated_at: new Date() });
     return { message: 'Password changed' };
+  }
+
+  async requestPasswordReset(email: string) {
+    const user = await this.usersService.findByEmail(email);
+    // Always return success to avoid user enumeration
+    if (!user) return { message: 'If that email exists, a reset link has been sent.' };
+
+    // Invalidate old unused tokens for this user
+    await this.knex('password_resets').where({ user_id: user.id }).whereNull('used_at').delete();
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await this.knex('password_resets').insert({
+      id: uuid(),
+      user_id: user.id,
+      token,
+      expires_at: expiresAt,
+    });
+
+    const frontendUrl = this.config.get('FRONTEND_URL', 'http://localhost:3002');
+    const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
+
+    await this.mailService.sendPasswordReset({
+      to: user.email,
+      name: user.first_name,
+      resetUrl,
+    });
+
+    return { message: 'If that email exists, a reset link has been sent.' };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const record = await this.knex('password_resets').where({ token }).whereNull('used_at').first();
+
+    if (!record) throw new BadRequestException('Invalid or expired reset link.');
+    if (new Date(record.expires_at) < new Date()) throw new BadRequestException('Reset link has expired.');
+
+    const password_hash = await bcrypt.hash(newPassword, 10);
+    await this.knex('users').where({ id: record.user_id }).update({ password_hash, updated_at: new Date() });
+    await this.knex('password_resets').where({ id: record.id }).update({ used_at: new Date() });
+
+    return { message: 'Password updated. You can now log in.' };
   }
 
   private buildTokenResponse(user: any) {

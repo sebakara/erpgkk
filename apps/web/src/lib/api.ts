@@ -32,6 +32,10 @@ export const authApi = {
   me: () => api.get('/auth/me').then((r) => r.data),
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.patch('/auth/change-password', data).then((r) => r.data),
+  forgotPassword: (email: string) =>
+    api.post('/auth/forgot-password', { email }).then((r) => r.data),
+  resetPassword: (token: string, password: string) =>
+    api.post('/auth/reset-password', { token, password }).then((r) => r.data),
 };
 
 // Company
