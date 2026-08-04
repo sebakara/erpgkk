@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { Eye, EyeOff } from 'lucide-react';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 
@@ -10,6 +11,7 @@ export default function RegisterPage() {
   const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
   const [form, setForm] = useState({ companyName: '', firstName: '', lastName: '', email: '', password: '' });
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -43,7 +45,6 @@ export default function RegisterPage() {
             { label: 'First Name', key: 'firstName', placeholder: 'John', type: 'text' },
             { label: 'Last Name', key: 'lastName', placeholder: 'Doe', type: 'text' },
             { label: 'Work Email', key: 'email', placeholder: 'john@acme.com', type: 'email' },
-            { label: 'Password', key: 'password', placeholder: '8+ characters', type: 'password' },
           ].map(({ label, key, placeholder, type }) => (
             <div key={key}>
               <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
@@ -54,6 +55,21 @@ export default function RegisterPage() {
               />
             </div>
           ))}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <div className="relative">
+              <input
+                type={showPw ? 'text' : 'password'} required minLength={8}
+                value={form.password} onChange={set('password')}
+                placeholder="8+ characters"
+                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <button type="button" onClick={() => setShowPw((v) => !v)}
+                className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600">
+                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
           <button
             type="submit" disabled={loading}
             className="w-full bg-primary-600 text-white py-2.5 rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors"
