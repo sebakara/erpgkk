@@ -189,6 +189,29 @@ export const filesApi = {
     api.delete(`/projects/${projectId}/files/${fileId}`).then((r) => r.data),
 };
 
+// Clients
+export const clientsApi = {
+  list: (search?: string) => api.get('/clients', { params: search ? { search } : {} }).then((r) => r.data),
+  get: (id: string) => api.get(`/clients/${id}`).then((r) => r.data),
+  create: (data: any) => api.post('/clients', data).then((r) => r.data),
+  update: (id: string, data: any) => api.patch(`/clients/${id}`, data).then((r) => r.data),
+  remove: (id: string) => api.delete(`/clients/${id}`).then((r) => r.data),
+  linkProject: (id: string, projectId: string) => api.post(`/clients/${id}/projects/${projectId}`).then((r) => r.data),
+  unlinkProject: (id: string, projectId: string) => api.delete(`/clients/${id}/projects/${projectId}`).then((r) => r.data),
+};
+
+// Newsletters
+export const newslettersApi = {
+  list: () => api.get('/newsletters').then((r) => r.data),
+  get: (id: string) => api.get(`/newsletters/${id}`).then((r) => r.data),
+  create: (data: any) => api.post('/newsletters', data).then((r) => r.data),
+  update: (id: string, data: any) => api.patch(`/newsletters/${id}`, data).then((r) => r.data),
+  remove: (id: string) => api.delete(`/newsletters/${id}`).then((r) => r.data),
+  send: (id: string, recipients: Array<{ email: string; name?: string }>) =>
+    api.post(`/newsletters/${id}/send`, { recipients }).then((r) => r.data),
+  getSends: (id: string) => api.get(`/newsletters/${id}/sends`).then((r) => r.data),
+};
+
 // Chat
 export const chatApi = {
   getConversations: () => api.get('/chat/conversations').then((r) => r.data),
