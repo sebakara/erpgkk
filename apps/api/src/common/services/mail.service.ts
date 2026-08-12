@@ -83,6 +83,52 @@ export class MailService {
     }
   }
 
+  async sendNewsletter(opts: { to: string; name?: string; subject: string; content: string }) {
+    const greeting = opts.name ? `Hi ${opts.name},` : 'Hello,';
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Inter,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);">
+        <tr>
+          <td style="background:#4f46e5;padding:28px 40px;">
+            <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700;">${opts.subject}</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px 40px;">
+            <p style="margin:0 0 20px;color:#374151;font-size:15px;">${greeting}</p>
+            <div style="color:#374151;font-size:15px;line-height:1.7;">
+              ${opts.content}
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 40px;border-top:1px solid #f3f4f6;">
+            <p style="margin:0;color:#9ca3af;font-size:12px;">
+              © ${new Date().getFullYear()} GKK ERP ·
+              You are receiving this because you are a registered contact.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    await this.transporter.sendMail({
+      from: `"GKK ERP" <${this.config.get('SMTP_USER')}>`,
+      to: opts.to,
+      subject: opts.subject,
+      html,
+    });
+    this.logger.log(`Newsletter sent to ${opts.to}`);
+  }
+
   async sendInvite(opts: { to: string; name: string; companyName: string; inviteUrl: string }) {
     const html = `
 <!DOCTYPE html>

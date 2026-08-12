@@ -14,6 +14,8 @@ import { DocsModule } from './docs/docs.module';
 import { ChatModule } from './chat/chat.module';
 import { FilesModule } from './files/files.module';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { ClientsModule } from './clients/clients.module';
+import { NewslettersModule } from './newsletters/newsletters.module';
 
 @Module({
   imports: [
@@ -32,6 +34,8 @@ import { IntegrationsModule } from './integrations/integrations.module';
     ChatModule,
     FilesModule,
     IntegrationsModule,
+    ClientsModule,
+    NewslettersModule,
   ],
 })
 export class AppModule {}
