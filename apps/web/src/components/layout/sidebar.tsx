@@ -7,15 +7,18 @@ import { useQuery } from '@tanstack/react-query';
 import { chatApi } from '@/lib/api';
 import {
   LayoutDashboard, FolderOpen, Users, Bell, LogOut, Settings, MessageSquare,
+  Users2, Mail,
 } from 'lucide-react';
 
 const ALL_NAV = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'employee'] },
-  { label: 'Projects', href: '/projects', icon: FolderOpen, roles: ['admin', 'manager', 'employee'] },
-  { label: 'HR', href: '/hr', icon: Users, roles: ['admin', 'manager', 'employee'] },
-  { label: 'Messages', href: '/chat', icon: MessageSquare, roles: ['admin', 'manager', 'employee'] },
-  { label: 'Notifications', href: '/notifications', icon: Bell, roles: ['admin', 'manager', 'employee'] },
-  { label: 'Settings', href: '/settings', icon: Settings, roles: ['admin', 'manager'] },
+  { label: 'Dashboard',    href: '/dashboard',    icon: LayoutDashboard, roles: ['admin', 'manager', 'employee'] },
+  { label: 'Projects',     href: '/projects',     icon: FolderOpen,      roles: ['admin', 'manager', 'employee'] },
+  { label: 'HR',           href: '/hr',           icon: Users,           roles: ['admin', 'manager', 'employee'] },
+  { label: 'Clients',      href: '/clients',      icon: Users2,          roles: ['admin', 'manager'] },
+  { label: 'Newsletters',  href: '/newsletters',  icon: Mail,            roles: ['admin', 'manager'] },
+  { label: 'Messages',     href: '/chat',         icon: MessageSquare,   roles: ['admin', 'manager', 'employee'] },
+  { label: 'Notifications',href: '/notifications',icon: Bell,            roles: ['admin', 'manager', 'employee'] },
+  { label: 'Settings',     href: '/settings',     icon: Settings,        roles: ['admin', 'manager'] },
 ];
 
 export function Sidebar() {
