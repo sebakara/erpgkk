@@ -29,7 +29,7 @@ export function RichTextEditor({ content, onChange, editable = true }: Props) {
   if (!editor) return null;
 
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+    <div className={editable ? 'border border-gray-200 rounded-xl overflow-hidden bg-white' : 'bg-white rounded-xl'}>
       {editable && (
         <div className="flex items-center gap-0.5 px-3 py-2 border-b border-gray-100 bg-gray-50 flex-wrap">
           <ToolbarGroup>
