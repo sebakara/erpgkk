@@ -16,5 +16,6 @@ import { DeptNotifierService } from './dept-notifier.service';
   imports: [NotificationsModule],
   providers: [DeptNotifierService, LeaveService, AnnouncementsService, PerformanceService, LeavePackagesService, ReportsService],
   controllers: [LeaveController, AnnouncementsController, PerformanceController, LeavePackagesController, ReportsController],
+  exports: [LeaveService],
 })
 export class HrModule {}

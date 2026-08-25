@@ -27,11 +27,12 @@ export default function DocEditorPage() {
   });
 
   useEffect(() => {
-    if (doc) {
-      setTitle(doc.title);
-      setContent(doc.content || '');
-    }
-  }, [doc]);
+    if (!doc) return;
+    setTitle(doc.title);
+    setContent(doc.content || '');
+    const empty = !doc.content || doc.content === '<p></p>';
+    if (empty) setMode('edit');
+  }, [doc?.id]);
 
   const saveMutation = useMutation({
     mutationFn: () => docsApi.update(projectId, docId, { title: title.trim(), content }),
@@ -151,8 +152,15 @@ export default function DocEditorPage() {
         />
       )}
 
-      {/* Editor / Viewer */}
-      <RichTextEditor content={content} onChange={handleContentChange} editable={mode === 'edit'} />
+      {/* Editor / Viewer — click the body in view mode to start typing */}
+      <div
+        onClick={() => {
+          if (mode === 'view') setMode('edit');
+        }}
+        className={mode === 'view' ? 'cursor-text' : undefined}
+      >
+        <RichTextEditor content={content} onChange={handleContentChange} editable={mode === 'edit'} />
+      </div>
     </div>
   );
 }

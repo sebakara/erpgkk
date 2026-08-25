@@ -217,6 +217,8 @@ export const chatApi = {
   getConversations: () => api.get('/chat/conversations').then((r) => r.data),
   startDirect: (userId: string) => api.post('/chat/conversations/direct', { userId }).then((r) => r.data),
   startDepartment: (departmentId: string) => api.post('/chat/conversations/department', { departmentId }).then((r) => r.data),
+  startProject: (projectId: string) => api.post('/chat/conversations/project', { projectId }).then((r) => r.data),
+  getPresence: () => api.get('/chat/presence').then((r) => r.data),
   getMessages: (convId: string) => api.get(`/chat/conversations/${convId}/messages`).then((r) => r.data),
   sendMessage: (convId: string, content: string) => api.post(`/chat/conversations/${convId}/messages`, { content }).then((r) => r.data),
   markRead: (convId: string) => api.post(`/chat/conversations/${convId}/read`).then((r) => r.data),

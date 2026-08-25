@@ -4,16 +4,22 @@ import { resolve } from 'path';
 
 dotenv.config({ path: resolve(__dirname, '../../.env') });
 
+function dbConnection() {
+  const socketPath = process.env.DB_SOCKET;
+  return {
+    host: process.env.DB_HOST || 'localhost',
+    port: Number(process.env.DB_PORT) || 3306,
+    database: process.env.DB_NAME || 'gkkerp',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    ...(socketPath ? { socketPath } : {}),
+  };
+}
+
 const config: { [key: string]: Knex.Config } = {
   development: {
     client: 'mysql2',
-    connection: {
-      host: process.env.DB_HOST || 'localhost',
-      port: Number(process.env.DB_PORT) || 3306,
-      database: process.env.DB_NAME || 'gkkerp',
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || 'secret',
-    },
+    connection: dbConnection(),
     migrations: {
       directory: './migrations',
       extension: 'ts',

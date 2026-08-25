@@ -1,11 +1,15 @@
-import { Injectable, Inject, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
 import { v4 as uuid } from 'uuid';
+import { ChatService } from '../chat/chat.service';
 
 @Injectable()
 export class ProjectsService {
-  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
+  constructor(
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
+    @Optional() private readonly chatService: ChatService,
+  ) {}
 
   async findAll(companyId: string, userId: string, userRole?: string) {
     if (userRole === 'admin') {
@@ -66,6 +70,7 @@ export class ProjectsService {
     const id = uuid();
     await this.knex('projects').insert({ id, company_id: companyId, owner_id: ownerId, ...data });
     await this.knex('project_members').insert({ id: uuid(), project_id: id, user_id: ownerId, role: 'owner' });
+    await this.chatService?.getOrCreateProject(id, companyId);
     return this.findById(id, companyId);
   }
 

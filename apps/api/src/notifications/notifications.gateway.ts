@@ -30,8 +30,10 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       const payload = this.jwtService.verify(token, { secret: this.configService.get('JWT_SECRET') });
       client.data.userId = payload.sub;
       client.join(`user:${payload.sub}`);
+      const wasOffline = !this.userSockets.get(payload.sub)?.size;
       if (!this.userSockets.has(payload.sub)) this.userSockets.set(payload.sub, new Set());
       this.userSockets.get(payload.sub).add(client.id);
+      if (wasOffline) this.server.emit('presence:online', { userId: payload.sub });
     } catch {
       client.disconnect();
     }
@@ -39,8 +41,21 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
 
   handleDisconnect(client: Socket) {
     const userId = client.data.userId;
-    if (userId) {
-      this.userSockets.get(userId)?.delete(client.id);
+    if (!userId) return;
+    this.userSockets.get(userId)?.delete(client.id);
+    if (!this.userSockets.get(userId)?.size) {
+      this.userSockets.delete(userId);
+      this.server.emit('presence:offline', { userId });
+    }
+  }
+
+  getOnlineUserIds(): string[] {
+    return [...this.userSockets.keys()].filter((id) => (this.userSockets.get(id)?.size ?? 0) > 0);
+  }
+
+  emitToUsers(userIds: string[], event: string, data: any) {
+    for (const id of [...new Set(userIds)]) {
+      this.server.to(`user:${id}`).emit(event, data);
     }
   }
 
@@ -67,6 +82,25 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   @SubscribeMessage('leave-project')
   onLeaveProject(@ConnectedSocket() client: Socket, @MessageBody() data: { projectId: string }) {
     client.leave(`project:${data.projectId}`);
+  }
+
+  @SubscribeMessage('chat:join')
+  onChatJoin(@ConnectedSocket() client: Socket, @MessageBody() data: { convId: string }) {
+    if (data?.convId) client.join(`chat:${data.convId}`);
+  }
+
+  @SubscribeMessage('chat:leave')
+  onChatLeave(@ConnectedSocket() client: Socket, @MessageBody() data: { convId: string }) {
+    if (data?.convId) client.leave(`chat:${data.convId}`);
+  }
+
+  @SubscribeMessage('chat:typing')
+  onChatTyping(@ConnectedSocket() client: Socket, @MessageBody() data: { convId: string }) {
+    if (!data?.convId || !client.data.userId) return;
+    client.to(`chat:${data.convId}`).emit('chat:typing', {
+      convId: data.convId,
+      userId: client.data.userId,
+    });
   }
 
   broadcastToProject(projectId: string, event: string, data: any) {

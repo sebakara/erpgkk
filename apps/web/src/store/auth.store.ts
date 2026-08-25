@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { User } from '@/types';
 
 interface AuthState {
@@ -12,6 +12,25 @@ interface AuthState {
   setHasHydrated: (v: boolean) => void;
 }
 
+/** localStorage throws in some Incognito / cookie-blocked browsers. */
+const memoryStorage: StateStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
+
+function safeStorage(): StateStorage {
+  if (typeof window === 'undefined') return memoryStorage;
+  try {
+    const key = '__os_probe';
+    window.localStorage.setItem(key, '1');
+    window.localStorage.removeItem(key);
+    return window.localStorage;
+  } catch {
+    return memoryStorage;
+  }
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -19,23 +38,32 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       _hasHydrated: false,
       setAuth: (user, token) => {
-        localStorage.setItem('access_token', token);
+        try {
+          if (typeof window !== 'undefined') localStorage.setItem('access_token', token);
+        } catch { /* storage blocked */ }
         set({ user, token });
       },
       updateUser: (partial) => set((s) => ({ user: s.user ? { ...s.user, ...partial } : null })),
       logout: () => {
-        localStorage.removeItem('access_token');
+        try {
+          if (typeof window !== 'undefined') localStorage.removeItem('access_token');
+        } catch { /* storage blocked */ }
         set({ user: null, token: null });
       },
       setHasHydrated: (v) => set({ _hasHydrated: v }),
     }),
     {
       name: 'auth-store',
+      storage: createJSONStorage(safeStorage),
+      skipHydration: true,
       partialize: (s) => ({ user: s.user, token: s.token }),
-      onRehydrateStorage: () => (state) => {
-        state?.setHasHydrated(true);
-        // keep axios interceptor in sync on page reload
-        if (state?.token) localStorage.setItem('access_token', state.token);
+      onRehydrateStorage: () => (state, error) => {
+        useAuthStore.setState({ _hasHydrated: true });
+        if (!error && state?.token && typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('access_token', state.token);
+          } catch { /* storage blocked */ }
+        }
       },
     },
   ),

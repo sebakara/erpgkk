@@ -66,6 +66,7 @@ gkkerp/
 │           ├── store/        # Zustand auth store
 │           └── types/        # Shared TypeScript types
 ├── docker-compose.yml
+├── pnpm-workspace.yaml
 ├── .env.example
 └── package.json
 ```
@@ -116,6 +117,7 @@ gkkerp/
 ### Prerequisites
 
 - Node.js 20+
+- pnpm 9+ (`corepack enable` then `corepack prepare pnpm@10 --activate`)
 - MySQL 8
 - Redis 7
 - Docker (optional — for MySQL + Redis)
@@ -125,11 +127,7 @@ gkkerp/
 ```bash
 git clone https://github.com/sebakara/gkkerp.git
 cd gkkerp
-
-# Install dependencies for each app
-cd apps/api && npm install
-cd ../web && npm install
-cd ../..
+pnpm install
 ```
 
 ### 2. Environment variables
@@ -177,9 +175,8 @@ Or use an existing MySQL installation and point the `.env` at it.
 ### 4. Run database migrations and seed
 
 ```bash
-cd apps/api
-npm run migrate
-npm run seed
+pnpm db:migrate
+pnpm db:seed
 ```
 
 This creates all tables and inserts:
@@ -192,11 +189,12 @@ This creates all tables and inserts:
 ### 5. Start the apps
 
 ```bash
-# Terminal 1 — API (port 3001)
-cd apps/api && npm run dev
+# Both apps
+pnpm dev
 
-# Terminal 2 — Frontend (port 3000)
-cd apps/web && npm run dev
+# Or separately
+pnpm --filter @gkkerp/api dev   # API on port 3001
+pnpm --filter @gkkerp/web dev   # Frontend on port 3000
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
@@ -231,12 +229,13 @@ sudo mkswap /swapfile && sudo swapon /swapfile
 docker compose up -d redis   # or native MySQL
 
 # 3. Install and migrate
-cd apps/api && npm install --no-audit --no-fund && npm run migrate && npm run seed
-cd ../web  && npm install --no-audit --no-fund
+pnpm install --frozen-lockfile
+pnpm db:migrate
+pnpm db:seed
+pnpm build
 
 # 4. Run with PM2
-pm2 start npm --name gkkerp-api --cwd /var/www/gkkerp/apps/api -- run dev
-pm2 start npm --name gkkerp-web --cwd /var/www/gkkerp/apps/web -- run dev
+pm2 startOrReload ecosystem.config.js --update-env
 pm2 save && pm2 startup
 ```
 

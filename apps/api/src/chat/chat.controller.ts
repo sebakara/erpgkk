@@ -23,6 +23,16 @@ export class ChatController {
     return this.chatService.getOrCreateDepartment(deptId, user.company_id);
   }
 
+  @Post('conversations/project')
+  startProject(@CurrentUser() user: any, @Body('projectId') projectId: string) {
+    return this.chatService.getOrCreateProject(projectId, user.company_id);
+  }
+
+  @Get('presence')
+  getPresence() {
+    return this.chatService.getPresence();
+  }
+
   @Get('conversations/:id/messages')
   getMessages(@Param('id') id: string, @CurrentUser() user: any) {
     return this.chatService.getMessages(id, user.id, user.department_id, user.role);

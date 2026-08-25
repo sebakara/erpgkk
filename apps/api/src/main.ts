@@ -8,18 +8,24 @@ import { mkdirSync, readdirSync } from 'fs';
 import knex from 'knex';
 import * as dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ path: resolve(__dirname, '../.env') });
+
+function dbConnection() {
+  const socketPath = process.env.DB_SOCKET;
+  return {
+    host: process.env.DB_HOST || 'localhost',
+    port: Number(process.env.DB_PORT) || 3306,
+    database: process.env.DB_NAME || 'gkkerp',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    ...(socketPath ? { socketPath } : {}),
+  };
+}
 
 async function runMigrations() {
   const db = knex({
     client: 'mysql2',
-    connection: {
-      host: process.env.DB_HOST || 'localhost',
-      port: Number(process.env.DB_PORT) || 3306,
-      database: process.env.DB_NAME || 'gkkerp',
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || 'secret',
-    },
+    connection: dbConnection(),
   });
   try {
     // Ensure tracking tables exist
@@ -41,7 +47,9 @@ async function runMigrations() {
 
     const completed: string[] = await db('knex_migrations').pluck('name');
     const migrationsDir = resolve(__dirname, 'database', 'migrations');
-    const files = readdirSync(migrationsDir).filter((f) => f.endsWith('.js')).sort();
+    const files = readdirSync(migrationsDir)
+      .filter((f) => f.endsWith('.js') || (f.endsWith('.ts') && !f.endsWith('.d.ts')))
+      .sort();
 
     const batchResult = await db('knex_migrations').max('batch as m');
     const batch = ((batchResult[0] as any).m ?? 0) + 1;

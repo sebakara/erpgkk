@@ -1,4 +1,5 @@
 'use client';
+import { useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import {
@@ -16,15 +17,31 @@ interface Props {
 export function RichTextEditor({ content, onChange, editable = true }: Props) {
   const editor = useEditor({
     extensions: [StarterKit],
-    content,
+    content: content || '<p></p>',
     editable,
-    onUpdate: ({ editor }) => onChange(editor.getHTML()),
+    immediatelyRender: false,
+    shouldRerenderOnTransaction: true,
+    onUpdate: ({ editor: ed }) => onChange(ed.getHTML()),
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none min-h-[400px] px-6 py-4',
+        class: 'prose prose-sm max-w-none focus:outline-none min-h-[400px] px-6 py-4 cursor-text',
       },
     },
   });
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    editor.setEditable(editable);
+    if (editable) editor.commands.focus('end');
+  }, [editor, editable]);
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || editor.isFocused) return;
+    const next = content || '<p></p>';
+    if (editor.getHTML() !== next) {
+      editor.commands.setContent(next, { emitUpdate: false });
+    }
+  }, [editor, content]);
 
   if (!editor) return null;
 

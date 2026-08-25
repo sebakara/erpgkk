@@ -55,16 +55,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (hasHydrated && !user) router.replace('/login');
   }, [hasHydrated, user, router]);
 
-  // Show spinner until the store has loaded from localStorage
-  if (!hasHydrated) {
+  if (!hasHydrated || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
-
-  if (!user) return null;
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
