@@ -36,8 +36,9 @@ export function RichTextEditor({ content, onChange, editable = true }: Props) {
   }, [editor, editable]);
 
   useEffect(() => {
-    if (!editor || editor.isDestroyed || editor.isFocused) return;
+    if (!editor || editor.isDestroyed) return;
     const next = content || '<p></p>';
+    if (editor.isFocused && !editor.isEmpty) return;
     if (editor.getHTML() !== next) {
       editor.commands.setContent(next, { emitUpdate: false });
     }
