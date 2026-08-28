@@ -17,11 +17,21 @@ export class StandupNotesController {
     return this.standupNotes.findAll(user, date);
   }
 
+  @Get('project/:projectId')
+  findByProject(
+    @CurrentUser() user: any,
+    @Param('projectId') projectId: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.standupNotes.findByProject(user, projectId, dateFrom, dateTo);
+  }
+
   @Put(':subjectUserId')
   save(
     @CurrentUser() user: any,
     @Param('subjectUserId') subjectUserId: string,
-    @Body() body: { standup_date: string; content: string },
+    @Body() body: { standup_date: string; content: string; project_id: string },
   ) {
     return this.standupNotes.save(user, subjectUserId, body);
   }

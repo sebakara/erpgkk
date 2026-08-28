@@ -19,6 +19,7 @@ interface StandupNotesActor {
 interface SaveStandupNote {
   standup_date: string;
   content: string;
+  project_id: string;
 }
 
 @Injectable()
@@ -29,7 +30,7 @@ export class StandupNotesService {
     this.assertLeadership(actor);
     const standupDate = this.validateDate(date ?? new Date().toISOString().slice(0, 10));
 
-    return this.knex('standup_notes as sn')
+    const notes = await this.knex('standup_notes as sn')
       .where({
         'sn.company_id': actor.company_id,
         'sn.author_id': actor.id,
@@ -37,9 +38,11 @@ export class StandupNotesService {
       })
       .whereNull('sn.deleted_at')
       .join('users as u', 'sn.subject_user_id', 'u.id')
+      .leftJoin('projects as p', 'sn.project_id', 'p.id')
       .select(
         'sn.id',
         'sn.subject_user_id',
+        'sn.project_id',
         'sn.content',
         'sn.created_at',
         'sn.updated_at',
@@ -49,16 +52,71 @@ export class StandupNotesService {
         'u.job_title',
         'u.avatar_url',
         'u.department_id',
+        'p.name as project_name',
+        'p.color as project_color',
+        'p.icon as project_icon',
+        'p.status as project_status',
       )
       .orderBy('u.first_name')
       .orderBy('u.last_name');
+
+    return this.formatNotes(notes);
+  }
+
+  async findByProject(
+    actor: StandupNotesActor,
+    projectId: string,
+    dateFrom?: string,
+    dateTo?: string,
+  ) {
+    this.assertLeadership(actor);
+    await this.assertCanUseProjects(actor, [projectId]);
+
+    const query = this.knex('standup_notes as sn')
+      .where({
+        'sn.company_id': actor.company_id,
+        'sn.author_id': actor.id,
+        'sn.project_id': projectId,
+      })
+      .whereNull('sn.deleted_at')
+      .join('users as u', 'sn.subject_user_id', 'u.id')
+      .join('projects as p', 'sn.project_id', 'p.id');
+
+    if (dateFrom) query.where('sn.standup_date', '>=', this.validateDate(dateFrom));
+    if (dateTo) query.where('sn.standup_date', '<=', this.validateDate(dateTo));
+
+    const notes = await query
+      .select(
+        'sn.id',
+        'sn.subject_user_id',
+        'sn.project_id',
+        'sn.content',
+        'sn.created_at',
+        'sn.updated_at',
+        this.knex.raw("DATE_FORMAT(sn.standup_date, '%Y-%m-%d') as standup_date"),
+        'u.first_name',
+        'u.last_name',
+        'u.job_title',
+        'u.avatar_url',
+        'u.department_id',
+        'p.name as project_name',
+        'p.color as project_color',
+        'p.icon as project_icon',
+        'p.status as project_status',
+      )
+      .orderBy('sn.standup_date', 'desc')
+      .orderBy('u.first_name');
+
+    return this.formatNotes(notes);
   }
 
   async save(actor: StandupNotesActor, subjectUserId: string, data: SaveStandupNote) {
     this.assertLeadership(actor);
     const standupDate = this.validateDate(data.standup_date);
     const content = this.validateContent(data.content);
+    const projectId = this.validateProjectId(data.project_id);
     await this.assertCanWriteAbout(actor, subjectUserId);
+    await this.assertCanUseProjects(actor, [projectId]);
 
     await this.knex('standup_notes')
       .insert({
@@ -66,17 +124,18 @@ export class StandupNotesService {
         company_id: actor.company_id,
         author_id: actor.id,
         subject_user_id: subjectUserId,
+        project_id: projectId,
         standup_date: standupDate,
         content,
       })
-      .onConflict(['author_id', 'subject_user_id', 'standup_date'])
+      .onConflict(['author_id', 'subject_user_id', 'standup_date', 'project_id'])
       .merge({
         content,
         deleted_at: null,
         updated_at: new Date(),
       });
 
-    return this.findOne(actor, subjectUserId, standupDate);
+    return this.findOne(actor, subjectUserId, projectId, standupDate);
   }
 
   async remove(actor: StandupNotesActor, id: string) {
@@ -94,19 +153,27 @@ export class StandupNotesService {
     return { deleted: true };
   }
 
-  private async findOne(actor: StandupNotesActor, subjectUserId: string, standupDate: string) {
+  private async findOne(
+    actor: StandupNotesActor,
+    subjectUserId: string,
+    projectId: string,
+    standupDate: string,
+  ) {
     const note = await this.knex('standup_notes as sn')
       .where({
         'sn.company_id': actor.company_id,
         'sn.author_id': actor.id,
         'sn.subject_user_id': subjectUserId,
+        'sn.project_id': projectId,
         'sn.standup_date': standupDate,
       })
       .whereNull('sn.deleted_at')
       .join('users as u', 'sn.subject_user_id', 'u.id')
+      .join('projects as p', 'sn.project_id', 'p.id')
       .select(
         'sn.id',
         'sn.subject_user_id',
+        'sn.project_id',
         'sn.content',
         'sn.created_at',
         'sn.updated_at',
@@ -116,11 +183,15 @@ export class StandupNotesService {
         'u.job_title',
         'u.avatar_url',
         'u.department_id',
+        'p.name as project_name',
+        'p.color as project_color',
+        'p.icon as project_icon',
+        'p.status as project_status',
       )
       .first();
 
     if (!note) throw new NotFoundException('Standup note not found');
-    return note;
+    return this.formatNotes([note])[0];
   }
 
   private assertLeadership(actor: StandupNotesActor) {
@@ -157,6 +228,51 @@ export class StandupNotesService {
     }
   }
 
+  private async assertCanUseProjects(actor: StandupNotesActor, projectIds: string[]) {
+    if (!projectIds.length) return;
+
+    const query = this.knex('projects as p')
+      .where('p.company_id', actor.company_id)
+      .whereNull('p.deleted_at')
+      .whereIn('p.id', projectIds);
+
+    if (actor.role === Role.Manager) {
+      const managedDepartmentIds = await this.knex('departments')
+        .where({ company_id: actor.company_id, manager_id: actor.id })
+        .pluck('id');
+      query.whereIn('p.department_id', managedDepartmentIds);
+    }
+
+    const allowedIds = await query.pluck('p.id');
+    if (allowedIds.length !== projectIds.length) {
+      throw new ForbiddenException('One or more selected projects are not accessible');
+    }
+  }
+
+  private formatNotes(notes: any[]) {
+    return notes.map((note) => {
+      const {
+        project_name,
+        project_color,
+        project_icon,
+        project_status,
+        ...rest
+      } = note;
+      return {
+        ...rest,
+        project: note.project_id
+          ? {
+            id: note.project_id,
+            name: project_name,
+            color: project_color,
+            icon: project_icon,
+            status: project_status,
+          }
+          : null,
+      };
+    });
+  }
+
   private validateDate(date: string) {
     if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       throw new BadRequestException('standup_date must use YYYY-MM-DD');
@@ -177,5 +293,12 @@ export class StandupNotesService {
       throw new BadRequestException('content cannot exceed 20,000 characters');
     }
     return content;
+  }
+
+  private validateProjectId(projectId: string) {
+    if (typeof projectId !== 'string' || !projectId) {
+      throw new BadRequestException('project_id is required');
+    }
+    return projectId;
   }
 }

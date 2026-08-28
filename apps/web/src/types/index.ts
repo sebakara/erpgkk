@@ -191,6 +191,13 @@ export interface StandupNote {
   job_title?: string;
   avatar_url?: string;
   department_id?: string;
+  project?: {
+    id: string;
+    name: string;
+    color?: string;
+    icon?: string;
+    status: 'active' | 'archived' | 'completed';
+  };
   created_at: string;
   updated_at: string;
 }

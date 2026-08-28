@@ -11,7 +11,15 @@ import {
   Phone, Mail, MapPin, CreditCard, AlertTriangle, ExternalLink, User, Camera,
   Lock, Save,
 } from 'lucide-react';
-import { hrApi, usersApi, departmentsApi, performanceApi, leavePackagesApi, chatApi } from '@/lib/api';
+import {
+  hrApi,
+  usersApi,
+  departmentsApi,
+  performanceApi,
+  leavePackagesApi,
+  chatApi,
+  projectsApi,
+} from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate, cn, getInitials } from '@/lib/utils';
@@ -24,6 +32,7 @@ import type {
   LeaveBalance,
   StandupNote,
   User as AppUser,
+  Project,
 } from '@/types';
 
 type Tab = 'overview' | 'employees' | 'standup-notes' | 'leave-packages' | 'performance' | 'reports';
@@ -391,11 +400,16 @@ function StandupNotesTab() {
   });
   const [search, setSearch] = useState('');
   const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState('');
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   const { data: employees = [], isLoading: employeesLoading } = useQuery<AppUser[]>({
     queryKey: ['employees'],
     queryFn: usersApi.list,
+  });
+  const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
+    queryKey: ['projects'],
+    queryFn: projectsApi.list,
   });
   const { data: notes = [], isLoading: notesLoading } = useQuery<StandupNote[]>({
     queryKey: ['standup-notes', date],
@@ -411,8 +425,11 @@ function StandupNotesTab() {
     return value.includes(search.trim().toLowerCase());
   });
   const selectedUser = developers.find((employee) => employee.id === selectedUserId);
-  const selectedNote = notes.find((note) => note.subject_user_id === selectedUserId);
-  const selectedDraftKey = `${date}:${selectedUserId}`;
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const selectedNote = notes.find(
+    (note) => note.subject_user_id === selectedUserId && note.project?.id === selectedProjectId,
+  );
+  const selectedDraftKey = `${date}:${selectedProjectId}:${selectedUserId}`;
   const hasDraft = Object.prototype.hasOwnProperty.call(drafts, selectedDraftKey);
   const content = hasDraft ? drafts[selectedDraftKey] : selectedNote?.content ?? '';
   const isDirty = hasDraft && content !== (selectedNote?.content ?? '');
@@ -423,11 +440,23 @@ function StandupNotesTab() {
     }
   }, [developers, selectedUserId]);
 
+  useEffect(() => {
+    if (!selectedProjectId || !projects.some((project) => project.id === selectedProjectId)) {
+      setSelectedProjectId(projects[0]?.id ?? '');
+    }
+  }, [projects, selectedProjectId]);
+
   const saveMutation = useMutation({
-    mutationFn: (input: { subjectUserId: string; standupDate: string; content: string }) =>
+    mutationFn: (input: {
+      subjectUserId: string;
+      standupDate: string;
+      content: string;
+      projectId: string;
+    }) =>
       hrApi.standupNotes.save(input.subjectUserId, {
         standup_date: input.standupDate,
         content: input.content,
+        project_id: input.projectId,
       }),
     onSuccess: (saved: StandupNote, input) => {
       qc.setQueryData<StandupNote[]>(['standup-notes', input.standupDate], (current = []) => {
@@ -438,7 +467,7 @@ function StandupNotesTab() {
       });
       setDrafts((current) => ({
         ...current,
-        [`${input.standupDate}:${input.subjectUserId}`]: saved.content,
+        [`${input.standupDate}:${input.projectId}:${input.subjectUserId}`]: saved.content,
       }));
       toast.success('Private standup note saved');
     },
@@ -447,7 +476,7 @@ function StandupNotesTab() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (input: { id: string; subjectUserId: string; standupDate: string }) =>
+    mutationFn: (input: { id: string; subjectUserId: string; projectId: string; standupDate: string }) =>
       hrApi.standupNotes.remove(input.id),
     onSuccess: (_result, input) => {
       qc.setQueryData<StandupNote[]>(['standup-notes', input.standupDate], (current = []) =>
@@ -455,7 +484,7 @@ function StandupNotesTab() {
       );
       setDrafts((current) => {
         const next = { ...current };
-        delete next[`${input.standupDate}:${input.subjectUserId}`];
+        delete next[`${input.standupDate}:${input.projectId}:${input.subjectUserId}`];
         return next;
       });
       toast.success('Standup note deleted');
@@ -464,7 +493,7 @@ function StandupNotesTab() {
       toast.error(error?.response?.data?.message ?? 'Failed to delete standup note'),
   });
 
-  if (employeesLoading || notesLoading) return <Spinner />;
+  if (employeesLoading || projectsLoading || notesLoading) return <Spinner />;
 
   return (
     <div className="space-y-4">
@@ -489,6 +518,41 @@ function StandupNotesTab() {
         Only you can access these notes. Other managers, admins, and the developer cannot view them.
       </div>
 
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
+          Select project
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {projects.map((project) => {
+            const selected = selectedProjectId === project.id;
+            return (
+              <button
+                key={project.id}
+                type="button"
+                onClick={() => setSelectedProjectId(project.id)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                  selected
+                    ? 'border-primary-300 bg-primary-50 text-primary-700'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50',
+                )}
+              >
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{ backgroundColor: project.color ?? '#9ca3af' }}
+                />
+                {project.icon && <span>{project.icon}</span>}
+                {project.name}
+                {selected && <Check size={12} />}
+              </button>
+            );
+          })}
+          {projects.length === 0 && (
+            <span className="text-sm text-gray-400">No accessible projects.</span>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] gap-4">
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="p-3 border-b border-gray-100">
@@ -505,7 +569,9 @@ function StandupNotesTab() {
 
           <div className="max-h-[520px] overflow-y-auto divide-y divide-gray-100">
             {visibleDevelopers.map((developer) => {
-              const note = notes.find((item) => item.subject_user_id === developer.id);
+              const note = notes.find(
+                (item) => item.subject_user_id === developer.id && item.project?.id === selectedProjectId,
+              );
               return (
                 <button
                   key={developer.id}
@@ -529,7 +595,9 @@ function StandupNotesTab() {
                     </p>
                     <p className="text-xs text-gray-400 truncate">{developer.job_title ?? 'Developer'}</p>
                   </div>
-                  {note && <Check size={14} className="text-green-500 shrink-0" />}
+                  {note && (
+                    <Check size={14} className="text-green-500 shrink-0" />
+                  )}
                 </button>
               );
             })}
@@ -543,14 +611,16 @@ function StandupNotesTab() {
         </div>
 
         <div className="bg-white border border-gray-200 rounded-xl p-5">
-          {selectedUser ? (
+          {selectedUser && selectedProject ? (
             <div className="space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="font-semibold text-gray-900">
                     {selectedUser.first_name} {selectedUser.last_name}
                   </h3>
-                  <p className="text-xs text-gray-400">{selectedUser.job_title ?? 'Developer'} · {date}</p>
+                  <p className="text-xs text-gray-400">
+                    {selectedUser.job_title ?? 'Developer'} · {selectedProject.name} · {date}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   {saveMutation.isPending ? (
@@ -585,6 +655,7 @@ function StandupNotesTab() {
                           deleteMutation.mutate({
                             id: selectedNote.id,
                             subjectUserId: selectedUser.id,
+                            projectId: selectedProject.id,
                             standupDate: date,
                           });
                         }
@@ -602,9 +673,10 @@ function StandupNotesTab() {
                         subjectUserId: selectedUser.id,
                         standupDate: date,
                         content,
+                        projectId: selectedProject.id,
                       })
                     }
-                    disabled={!date || !isDirty || saveMutation.isPending}
+                    disabled={!date || !selectedProjectId || !isDirty || saveMutation.isPending}
                     className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50"
                   >
                     <Save size={14} />
@@ -615,7 +687,7 @@ function StandupNotesTab() {
             </div>
           ) : (
             <div className="min-h-[360px] flex items-center justify-center text-sm text-gray-400">
-              Select a developer to write a private note.
+              Select a project and developer to write a private note.
             </div>
           )}
         </div>

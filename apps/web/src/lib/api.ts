@@ -95,7 +95,12 @@ export const hrApi = {
   },
   standupNotes: {
     list: (date: string) => api.get('/hr/standup-notes', { params: { date } }).then((r) => r.data),
-    save: (subjectUserId: string, data: { standup_date: string; content: string }) =>
+    byProject: (projectId: string, params?: { dateFrom?: string; dateTo?: string }) =>
+      api.get(`/hr/standup-notes/project/${projectId}`, { params }).then((r) => r.data),
+    save: (
+      subjectUserId: string,
+      data: { standup_date: string; content: string; project_id: string },
+    ) =>
       api.put(`/hr/standup-notes/${subjectUserId}`, data).then((r) => r.data),
     remove: (id: string) => api.delete(`/hr/standup-notes/${id}`).then((r) => r.data),
   },

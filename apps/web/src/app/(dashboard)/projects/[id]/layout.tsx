@@ -3,14 +3,31 @@ import { useParams, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { projectsApi, sprintsApi } from '@/lib/api';
 import Link from 'next/link';
-import { LayoutGrid, ListTodo, FileText, BarChart2, Settings, CircleDot, FolderOpen } from 'lucide-react';
+import {
+  LayoutGrid,
+  ListTodo,
+  FileText,
+  BarChart2,
+  Settings,
+  CircleDot,
+  FolderOpen,
+  Lock,
+  type LucideIcon,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth.store';
 
-const TABS = [
+const TABS: Array<{
+  label: string;
+  segment: string;
+  icon: LucideIcon;
+  leadershipOnly?: boolean;
+}> = [
   { label: 'Issues',    segment: 'issues',    icon: CircleDot  },
   { label: 'Board',     segment: 'board',     icon: LayoutGrid },
   { label: 'Backlog',   segment: 'backlog',   icon: ListTodo   },
   { label: 'Docs',      segment: 'docs',      icon: FileText   },
+  { label: 'Standup Notes', segment: 'standup-notes', icon: Lock, leadershipOnly: true },
   { label: 'Folder',    segment: 'folder',    icon: FolderOpen },
   { label: 'Analytics', segment: 'analytics', icon: BarChart2  },
   { label: 'Settings',  segment: 'settings',  icon: Settings   },
@@ -19,6 +36,8 @@ const TABS = [
 export default function ProjectLayout({ children }: { children: React.ReactNode }) {
   const { id } = useParams<{ id: string }>();
   const pathname = usePathname();
+  const user = useAuthStore((state) => state.user);
+  const canViewStandupNotes = user?.role === 'admin' || user?.role === 'manager';
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
@@ -72,7 +91,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
 
         {/* Tab nav */}
         <nav className="flex gap-1 -mb-px overflow-x-auto">
-          {TABS.map(({ label, segment, icon: Icon }) => {
+          {TABS.filter((tab) => !tab.leadershipOnly || canViewStandupNotes).map(({ label, segment, icon: Icon }) => {
             const href = `/projects/${id}/${segment}`;
             const active = pathname === href || pathname.startsWith(`${href}/`);
             return (

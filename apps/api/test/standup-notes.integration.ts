@@ -41,6 +41,9 @@ test('standup notes remain private to their author and respect manager scope', a
       otherManager: uuid(),
       developer: uuid(),
       outsideDeveloper: uuid(),
+      managedProject: uuid(),
+      otherProject: uuid(),
+      outsideProject: uuid(),
     };
 
     await transaction('companies').insert([
@@ -126,6 +129,29 @@ test('standup notes remain private to their author and respect manager scope', a
     await transaction('departments')
       .where({ id: ids.otherDepartment })
       .update({ manager_id: ids.otherManager });
+    await transaction('projects').insert([
+      {
+        id: ids.managedProject,
+        company_id: ids.company,
+        owner_id: ids.manager,
+        department_id: ids.managedDepartment,
+        name: 'Managed Project',
+      },
+      {
+        id: ids.otherProject,
+        company_id: ids.company,
+        owner_id: ids.otherManager,
+        department_id: ids.otherDepartment,
+        name: 'Other Project',
+      },
+      {
+        id: ids.outsideProject,
+        company_id: ids.otherCompany,
+        owner_id: ids.outsideDeveloper,
+        department_id: ids.outsideDepartment,
+        name: 'Outside Project',
+      },
+    ]);
 
     const service = new StandupNotesService(transaction as unknown as Knex);
     const date = '2026-08-28';
@@ -138,9 +164,21 @@ test('standup notes remain private to their author and respect manager scope', a
     const adminNote = await service.save(admin, ids.developer, {
       standup_date: date,
       content: 'Only the author should see this.',
+      project_id: ids.managedProject,
     });
-    assert.equal((await service.findAll(admin, date)).length, 1);
+    const secondProjectNote = await service.save(admin, ids.developer, {
+      standup_date: date,
+      content: 'A separate note for the other project.',
+      project_id: ids.otherProject,
+    });
+    assert.notEqual(adminNote.id, secondProjectNote.id);
+    assert.equal((await service.findAll(admin, date)).length, 2);
+    assert.equal(adminNote.project.id, ids.managedProject);
+    assert.equal(secondProjectNote.project.id, ids.otherProject);
     assert.equal((await service.findAll(otherAdmin, date)).length, 0);
+    assert.equal((await service.findByProject(admin, ids.managedProject)).length, 1);
+    assert.equal((await service.findByProject(admin, ids.otherProject)).length, 1);
+    assert.equal((await service.findByProject(otherAdmin, ids.managedProject)).length, 0);
 
     await assert.rejects(
       service.remove(otherAdmin, adminNote.id),
@@ -150,20 +188,47 @@ test('standup notes remain private to their author and respect manager scope', a
       service.findAll(developer, date),
       (error: unknown) => error instanceof ForbiddenException,
     );
+    await assert.rejects(
+      service.findByProject(developer, ids.managedProject),
+      (error: unknown) => error instanceof ForbiddenException,
+    );
 
     await service.save(manager, ids.developer, {
       standup_date: date,
       content: 'Manager-owned private note.',
+      project_id: ids.managedProject,
     });
-    assert.equal((await service.findAll(manager, date)).length, 1);
-    assert.equal((await service.findAll(admin, date))[0].content, 'Only the author should see this.');
+    const managerNotes = await service.findAll(manager, date);
+    assert.equal(managerNotes.length, 1);
+    assert.equal(managerNotes[0].project.id, ids.managedProject);
+    assert.equal((await service.findByProject(manager, ids.managedProject)).length, 1);
+    assert.ok(
+      (await service.findAll(admin, date))
+        .some((note) => note.content === 'Only the author should see this.'),
+    );
 
     await assert.rejects(
-      service.save(otherManager, ids.developer, { standup_date: date, content: 'Not allowed' }),
+      service.save(otherManager, ids.developer, {
+        standup_date: date,
+        content: 'Not allowed',
+        project_id: ids.otherProject,
+      }),
       (error: unknown) => error instanceof ForbiddenException,
     );
     await assert.rejects(
-      service.save(admin, ids.outsideDeveloper, { standup_date: date, content: 'Not allowed' }),
+      service.save(manager, ids.developer, {
+        standup_date: date,
+        content: 'Project not allowed',
+        project_id: ids.otherProject,
+      }),
+      (error: unknown) => error instanceof ForbiddenException,
+    );
+    await assert.rejects(
+      service.save(admin, ids.outsideDeveloper, {
+        standup_date: date,
+        content: 'Not allowed',
+        project_id: ids.outsideProject,
+      }),
       (error: unknown) => error instanceof NotFoundException,
     );
   } finally {
