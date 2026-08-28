@@ -5,7 +5,14 @@ on:
     branches: [main]
 
 jobs:
+  # Gate. `next build` loads postcss.config.js, so a compromised config executes
+  # on this runner alongside the deploy key — scan before anything is built.
+  security-scan:
+    uses: ./.github/workflows/security-malware-scan.yml
+
   deploy:
+    needs: security-scan
+    if: ${{ needs.security-scan.result == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
