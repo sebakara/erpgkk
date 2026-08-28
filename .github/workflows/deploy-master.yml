@@ -49,13 +49,24 @@ jobs:
           fi
           echo "$SSH_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          printf 'Host 109.199.96.234\n  Port 2245\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  IdentityFile ~/.ssh/id_rsa\n' > ~/.ssh/config
+          printf 'Host 109.199.96.234\n  User maic\n  Port 2245\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  IdentityFile ~/.ssh/id_rsa\n' > ~/.ssh/config
           chmod 600 ~/.ssh/config
         env:
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY_PROD }}
 
       - name: Prune to production dependencies
         run: pnpm prune --prod
+
+      - name: Verify server prerequisites
+        run: |
+          ssh maic@109.199.96.234 '
+            set -e
+            export NVM_DIR="$HOME/.nvm"
+            [ ! -s "$NVM_DIR/nvm.sh" ] || . "$NVM_DIR/nvm.sh"
+            test -d /var/www/erpgkk
+            test -w /var/www/erpgkk
+            command -v pm2 >/dev/null
+          '
 
       - name: Sync app to server
         run: |
@@ -67,39 +78,22 @@ jobs:
             --exclude='apps/web/.env.*' \
             --exclude='apps/web/.next/cache' \
             --exclude='uploads' \
-            ./ root@109.199.96.234:/var/www/erpgkk/
+            ./ maic@109.199.96.234:/var/www/erpgkk/
 
-      - name: Install Nginx config
+      - name: Restart services
         run: |
-          scp deploy/nginx/ops.kwikkoders.com \
-            root@109.199.96.234:/etc/nginx/sites-available/ops.kwikkoders.com
-
-      - name: Bootstrap server and restart services
-        run: |
-          ssh root@109.199.96.234 '
+          ssh maic@109.199.96.234 '
             set -e
-
-            # Fix Git dubious ownership if someone runs git commands on the server
-            git config --global --add safe.directory /var/www/erpgkk 2>/dev/null || true
+            export NVM_DIR="$HOME/.nvm"
+            [ ! -s "$NVM_DIR/nvm.sh" ] || . "$NVM_DIR/nvm.sh"
 
             # Ensure uploads directory exists
             mkdir -p /var/www/erpgkk/uploads
 
-            # Install PM2 globally if missing
-            if ! command -v pm2 >/dev/null 2>&1; then
-              npm install -g pm2
-            fi
-
-            # Enable Nginx site and reload
-            ln -sf /etc/nginx/sites-available/ops.kwikkoders.com \
-                   /etc/nginx/sites-enabled/ops.kwikkoders.com
-            nginx -t && systemctl reload nginx
-
-            # Start / reload app processes
+            # Start/reload PM2 as maic
             cd /var/www/erpgkk
             pm2 startOrReload ecosystem.config.js --update-env
             pm2 save
-            pm2 startup systemd -u root --hp /root 2>/dev/null || true
 
             echo "Deploy complete"
           '

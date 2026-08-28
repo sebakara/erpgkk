@@ -7,8 +7,6 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       env: { NODE_ENV: 'production' },
-      error_file: '/root/.pm2/logs/gkkerp-api-error.log',
-      out_file: '/root/.pm2/logs/gkkerp-api-out.log',
     },
     {
       name: 'gkkerp-web',
@@ -18,8 +16,6 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       env: { NODE_ENV: 'production' },
-      error_file: '/root/.pm2/logs/gkkerp-web-error.log',
-      out_file: '/root/.pm2/logs/gkkerp-web-out.log',
     },
   ],
 };
