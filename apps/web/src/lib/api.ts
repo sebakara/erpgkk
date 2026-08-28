@@ -93,6 +93,12 @@ export const hrApi = {
     list: () => api.get('/hr/announcements').then((r) => r.data),
     create: (data: any) => api.post('/hr/announcements', data).then((r) => r.data),
   },
+  standupNotes: {
+    list: (date: string) => api.get('/hr/standup-notes', { params: { date } }).then((r) => r.data),
+    save: (subjectUserId: string, data: { standup_date: string; content: string }) =>
+      api.put(`/hr/standup-notes/${subjectUserId}`, data).then((r) => r.data),
+    remove: (id: string) => api.delete(`/hr/standup-notes/${id}`).then((r) => r.data),
+  },
 };
 
 // Docs

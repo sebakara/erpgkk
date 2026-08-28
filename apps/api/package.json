@@ -8,7 +8,8 @@
     "migrate": "knex migrate:latest --knexfile src/database/knexfile.ts",
     "migrate:make": "knex migrate:make --knexfile src/database/knexfile.ts",
     "migrate:rollback": "knex migrate:rollback --knexfile src/database/knexfile.ts",
-    "seed": "knex seed:run --knexfile src/database/knexfile.ts"
+    "seed": "knex seed:run --knexfile src/database/knexfile.ts",
+    "test:standup-notes": "node --test -r ts-node/register test/standup-notes.integration.ts"
   },
   "dependencies": {
     "@nestjs/bull": "^10.1.1",

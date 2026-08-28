@@ -9,6 +9,7 @@ import {
   ChevronDown, ChevronRight, Building2, Shield, Briefcase, Trash2, Pencil,
   CalendarDays, AlertCircle, Filter, TrendingUp, Award, MessageSquare,
   Phone, Mail, MapPin, CreditCard, AlertTriangle, ExternalLink, User, Camera,
+  Lock, Save,
 } from 'lucide-react';
 import { hrApi, usersApi, departmentsApi, performanceApi, leavePackagesApi, chatApi } from '@/lib/api';
 import { useRouter } from 'next/navigation';
@@ -16,9 +17,16 @@ import { useAuthStore } from '@/store/auth.store';
 import { formatDate, cn, getInitials } from '@/lib/utils';
 import { desktopNotify } from '@/lib/desktop-notify';
 import toast from 'react-hot-toast';
-import type { LeaveRequest, PerformanceReview, LeavePackage, LeaveBalance } from '@/types';
+import type {
+  LeaveRequest,
+  PerformanceReview,
+  LeavePackage,
+  LeaveBalance,
+  StandupNote,
+  User as AppUser,
+} from '@/types';
 
-type Tab = 'overview' | 'employees' | 'leave-packages' | 'performance' | 'reports';
+type Tab = 'overview' | 'employees' | 'standup-notes' | 'leave-packages' | 'performance' | 'reports';
 
 const LEAVE_STATUS_STYLE: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-700',
@@ -31,16 +39,26 @@ const LEAVE_TYPES = ['annual', 'sick', 'emergency', 'unpaid', 'maternity', 'pate
 export default function HrPage() {
   const user = useAuthStore((s) => s.user);
   const isManager = user?.role !== 'employee';
+  const canUseStandupNotes = user?.role === 'admin' || user?.role === 'manager';
   const [tab, setTab] = useState<Tab>('overview');
 
-  const allTabs: { key: Tab; label: string; icon: React.ReactNode; managerOnly?: boolean }[] = [
+  const allTabs: {
+    key: Tab;
+    label: string;
+    icon: React.ReactNode;
+    managerOnly?: boolean;
+    standupNotesOnly?: boolean;
+  }[] = [
     { key: 'overview', label: isManager ? 'Overview' : 'My Leave', icon: <FileText size={14} /> },
     { key: 'employees', label: 'Employees', icon: <Users size={14} /> },
+    { key: 'standup-notes', label: 'Standup Notes', icon: <Lock size={14} />, standupNotesOnly: true },
     { key: 'leave-packages', label: 'Leave Packages', icon: <Package size={14} />, managerOnly: true },
     { key: 'performance', label: 'Performance', icon: <Star size={14} /> },
     { key: 'reports', label: 'Reports', icon: <BarChart2 size={14} />, managerOnly: true },
   ];
-  const tabs = allTabs.filter((t) => !t.managerOnly || isManager);
+  const tabs = allTabs.filter(
+    (t) => (!t.managerOnly || isManager) && (!t.standupNotesOnly || canUseStandupNotes),
+  );
 
   return (
     <div className="space-y-5">
@@ -63,6 +81,7 @@ export default function HrPage() {
 
       {tab === 'overview' && <OverviewTab isManager={isManager} user={user} />}
       {tab === 'employees' && <EmployeesTab isManager={isManager} currentUser={user} />}
+      {tab === 'standup-notes' && canUseStandupNotes && <StandupNotesTab />}
       {tab === 'leave-packages' && <LeavePackagesTab isManager={isManager} />}
       {tab === 'performance' && <PerformanceTab user={user} />}
       {tab === 'reports' && <ReportsTab />}
@@ -357,6 +376,250 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ─── PRIVATE STANDUP NOTES TAB ─────────────────────────────────────────── */
+function StandupNotesTab() {
+  const qc = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
+  const [date, setDate] = useState(() => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60_000;
+    return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+  });
+  const [search, setSearch] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  const { data: employees = [], isLoading: employeesLoading } = useQuery<AppUser[]>({
+    queryKey: ['employees'],
+    queryFn: usersApi.list,
+  });
+  const { data: notes = [], isLoading: notesLoading } = useQuery<StandupNote[]>({
+    queryKey: ['standup-notes', date],
+    queryFn: () => hrApi.standupNotes.list(date),
+    enabled: Boolean(date),
+  });
+
+  const developers = employees.filter(
+    (employee) => employee.is_active && employee.role === 'employee' && employee.id !== currentUser?.id,
+  );
+  const visibleDevelopers = developers.filter((employee) => {
+    const value = `${employee.first_name} ${employee.last_name} ${employee.job_title ?? ''}`.toLowerCase();
+    return value.includes(search.trim().toLowerCase());
+  });
+  const selectedUser = developers.find((employee) => employee.id === selectedUserId);
+  const selectedNote = notes.find((note) => note.subject_user_id === selectedUserId);
+  const selectedDraftKey = `${date}:${selectedUserId}`;
+  const hasDraft = Object.prototype.hasOwnProperty.call(drafts, selectedDraftKey);
+  const content = hasDraft ? drafts[selectedDraftKey] : selectedNote?.content ?? '';
+  const isDirty = hasDraft && content !== (selectedNote?.content ?? '');
+
+  useEffect(() => {
+    if (!selectedUserId || !developers.some((employee) => employee.id === selectedUserId)) {
+      setSelectedUserId(developers[0]?.id ?? '');
+    }
+  }, [developers, selectedUserId]);
+
+  const saveMutation = useMutation({
+    mutationFn: (input: { subjectUserId: string; standupDate: string; content: string }) =>
+      hrApi.standupNotes.save(input.subjectUserId, {
+        standup_date: input.standupDate,
+        content: input.content,
+      }),
+    onSuccess: (saved: StandupNote, input) => {
+      qc.setQueryData<StandupNote[]>(['standup-notes', input.standupDate], (current = []) => {
+        const existing = current.some((note) => note.id === saved.id);
+        return existing
+          ? current.map((note) => (note.id === saved.id ? saved : note))
+          : [...current, saved];
+      });
+      setDrafts((current) => ({
+        ...current,
+        [`${input.standupDate}:${input.subjectUserId}`]: saved.content,
+      }));
+      toast.success('Private standup note saved');
+    },
+    onError: (error: any) =>
+      toast.error(error?.response?.data?.message ?? 'Failed to save standup note'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (input: { id: string; subjectUserId: string; standupDate: string }) =>
+      hrApi.standupNotes.remove(input.id),
+    onSuccess: (_result, input) => {
+      qc.setQueryData<StandupNote[]>(['standup-notes', input.standupDate], (current = []) =>
+        current.filter((note) => note.id !== input.id),
+      );
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[`${input.standupDate}:${input.subjectUserId}`];
+        return next;
+      });
+      toast.success('Standup note deleted');
+    },
+    onError: (error: any) =>
+      toast.error(error?.response?.data?.message ?? 'Failed to delete standup note'),
+  });
+
+  if (employeesLoading || notesLoading) return <Spinner />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-semibold text-gray-900">Private standup notes</h2>
+          <p className="text-sm text-gray-500">Capture observations and follow-ups for each developer.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <CalendarDays size={15} className="text-gray-400" />
+          <input
+            type="date"
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
+        <Lock size={15} className="shrink-0" />
+        Only you can access these notes. Other managers, admins, and the developer cannot view them.
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] gap-4">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="p-3 border-b border-gray-100">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search developers…"
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+
+          <div className="max-h-[520px] overflow-y-auto divide-y divide-gray-100">
+            {visibleDevelopers.map((developer) => {
+              const note = notes.find((item) => item.subject_user_id === developer.id);
+              return (
+                <button
+                  key={developer.id}
+                  type="button"
+                  onClick={() => setSelectedUserId(developer.id)}
+                  className={cn(
+                    'w-full p-3 flex items-center gap-3 text-left transition-colors',
+                    selectedUserId === developer.id ? 'bg-primary-50' : 'hover:bg-gray-50',
+                  )}
+                >
+                  {developer.avatar_url ? (
+                    <img src={developer.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-semibold shrink-0">
+                      {getInitials(`${developer.first_name} ${developer.last_name}`)}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {developer.first_name} {developer.last_name}
+                    </p>
+                    <p className="text-xs text-gray-400 truncate">{developer.job_title ?? 'Developer'}</p>
+                  </div>
+                  {note && <Check size={14} className="text-green-500 shrink-0" />}
+                </button>
+              );
+            })}
+
+            {visibleDevelopers.length === 0 && (
+              <p className="p-6 text-center text-sm text-gray-400">
+                {developers.length === 0 ? 'No developers are available.' : 'No developers match your search.'}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
+          {selectedUser ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-gray-900">
+                    {selectedUser.first_name} {selectedUser.last_name}
+                  </h3>
+                  <p className="text-xs text-gray-400">{selectedUser.job_title ?? 'Developer'} · {date}</p>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  {saveMutation.isPending ? (
+                    <span className="text-gray-400">Saving…</span>
+                  ) : isDirty ? (
+                    <span className="text-amber-600">Unsaved changes</span>
+                  ) : selectedNote ? (
+                    <span className="flex items-center gap-1 text-green-600"><Check size={12} /> Saved</span>
+                  ) : null}
+                </div>
+              </div>
+
+              <textarea
+                value={content}
+                onChange={(event) =>
+                  setDrafts((current) => ({ ...current, [selectedDraftKey]: event.target.value }))
+                }
+                maxLength={20_000}
+                rows={16}
+                placeholder="Add private observations, blockers, commitments, coaching points, or follow-ups from this standup…"
+                className="w-full resize-y px-4 py-3 text-sm leading-6 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-gray-400">{content.length.toLocaleString()} / 20,000</span>
+                <div className="flex items-center gap-2">
+                  {selectedNote && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Delete this private standup note?')) {
+                          deleteMutation.mutate({
+                            id: selectedNote.id,
+                            subjectUserId: selectedUser.id,
+                            standupDate: date,
+                          });
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                      className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      saveMutation.mutate({
+                        subjectUserId: selectedUser.id,
+                        standupDate: date,
+                        content,
+                      })
+                    }
+                    disabled={!date || !isDirty || saveMutation.isPending}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    <Save size={14} />
+                    Save note
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="min-h-[360px] flex items-center justify-center text-sm text-gray-400">
+              Select a developer to write a private note.
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

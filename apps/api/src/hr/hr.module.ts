@@ -11,11 +11,28 @@ import { ReportsService } from './reports/reports.service';
 import { ReportsController } from './reports/reports.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { DeptNotifierService } from './dept-notifier.service';
+import { StandupNotesService } from './standup-notes/standup-notes.service';
+import { StandupNotesController } from './standup-notes/standup-notes.controller';
 
 @Module({
   imports: [NotificationsModule],
-  providers: [DeptNotifierService, LeaveService, AnnouncementsService, PerformanceService, LeavePackagesService, ReportsService],
-  controllers: [LeaveController, AnnouncementsController, PerformanceController, LeavePackagesController, ReportsController],
+  providers: [
+    DeptNotifierService,
+    LeaveService,
+    AnnouncementsService,
+    PerformanceService,
+    LeavePackagesService,
+    ReportsService,
+    StandupNotesService,
+  ],
+  controllers: [
+    LeaveController,
+    AnnouncementsController,
+    PerformanceController,
+    LeavePackagesController,
+    ReportsController,
+    StandupNotesController,
+  ],
   exports: [LeaveService],
 })
 export class HrModule {}

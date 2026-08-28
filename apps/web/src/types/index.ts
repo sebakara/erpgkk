@@ -181,6 +181,20 @@ export interface PerformanceReview {
   updated_at: string;
 }
 
+export interface StandupNote {
+  id: string;
+  subject_user_id: string;
+  standup_date: string;
+  content: string;
+  first_name: string;
+  last_name: string;
+  job_title?: string;
+  avatar_url?: string;
+  department_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Notification {
   id: string;
   user_id: string;
