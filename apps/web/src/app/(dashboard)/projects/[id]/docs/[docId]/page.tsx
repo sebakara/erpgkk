@@ -9,6 +9,11 @@ import { formatDate } from '@/lib/utils';
 import type { Doc } from '@/types';
 import toast from 'react-hot-toast';
 
+interface DocDraft {
+  title: string;
+  content: string;
+}
+
 export default function DocEditorPage() {
   const { id: projectId, docId } = useParams<{ id: string; docId: string }>();
   const router = useRouter();
@@ -20,36 +25,49 @@ export default function DocEditorPage() {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestDraft = useRef<DocDraft>({ title: '', content: '' });
 
   const { data: doc, isLoading } = useQuery<Doc>({
-    queryKey: ['doc', docId],
+    queryKey: ['doc', projectId, docId],
     queryFn: () => docsApi.get(projectId, docId),
   });
 
   useEffect(() => {
-    if (!doc) return;
-    setTitle(doc.title);
-    setContent(doc.content || '');
+    if (!doc || isDirty) return;
+    const draft = { title: doc.title, content: doc.content || '' };
+    latestDraft.current = draft;
+    setTitle(draft.title);
+    setContent(draft.content);
     const empty = !doc.content || doc.content === '<p></p>';
     if (empty) setMode('edit');
-  }, [doc?.id]);
+  }, [doc?.id, doc?.title, doc?.content, isDirty]);
 
   const saveMutation = useMutation({
-    mutationFn: () => docsApi.update(projectId, docId, { title: title.trim(), content }),
-    onSuccess: () => {
+    mutationFn: (draft: DocDraft) =>
+      docsApi.update(projectId, docId, {
+        title: draft.title.trim(),
+        content: draft.content,
+      }),
+    onSuccess: (_savedDoc, savedDraft) => {
       qc.invalidateQueries({ queryKey: ['docs', projectId] });
-      qc.invalidateQueries({ queryKey: ['doc', docId] });
-      setIsDirty(false);
-      setLastSaved(new Date());
+      qc.invalidateQueries({ queryKey: ['doc', projectId, docId] });
+      const currentDraft = latestDraft.current;
+      if (
+        currentDraft.title === savedDraft.title
+        && currentDraft.content === savedDraft.content
+      ) {
+        setIsDirty(false);
+        setLastSaved(new Date());
+      }
     },
     onError: () => toast.error('Failed to save'),
   });
 
-  const scheduleAutoSave = useCallback(() => {
+  const scheduleAutoSave = useCallback((draft: DocDraft) => {
     setIsDirty(true);
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
-      saveMutation.mutate();
+      saveMutation.mutate(draft);
     }, 2000);
   }, [saveMutation]);
 
@@ -58,18 +76,22 @@ export default function DocEditorPage() {
   }, []);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTitle(e.target.value);
-    scheduleAutoSave();
+    const draft = { ...latestDraft.current, title: e.target.value };
+    latestDraft.current = draft;
+    setTitle(draft.title);
+    scheduleAutoSave(draft);
   };
 
   const handleContentChange = (html: string) => {
-    setContent(html);
-    scheduleAutoSave();
+    const draft = { ...latestDraft.current, content: html };
+    latestDraft.current = draft;
+    setContent(draft.content);
+    scheduleAutoSave(draft);
   };
 
   const handleManualSave = () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    saveMutation.mutate();
+    saveMutation.mutate(latestDraft.current);
   };
 
   if (isLoading) {
