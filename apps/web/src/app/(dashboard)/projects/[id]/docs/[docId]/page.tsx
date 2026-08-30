@@ -43,6 +43,7 @@ export default function DocEditorPage() {
   }, [doc?.id, doc?.title, doc?.content, isDirty]);
 
   const saveMutation = useMutation({
+    scope: { id: `document-${docId}` },
     mutationFn: (draft: DocDraft) =>
       docsApi.update(projectId, docId, {
         title: draft.title.trim(),
@@ -68,7 +69,7 @@ export default function DocEditorPage() {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
       saveMutation.mutate(draft);
-    }, 2000);
+    }, 1000);
   }, [saveMutation]);
 
   useEffect(() => {
@@ -89,9 +90,44 @@ export default function DocEditorPage() {
     scheduleAutoSave(draft);
   };
 
-  const handleManualSave = () => {
+  const saveCurrentDraft = () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     saveMutation.mutate(latestDraft.current);
+  };
+
+  const handleContentBlur = (html: string) => {
+    const draft = { ...latestDraft.current, content: html };
+    latestDraft.current = draft;
+    setContent(draft.content);
+    const hasUnsavedChanges =
+      draft.title.trim() !== doc?.title
+      || draft.content !== (doc?.content || '');
+    if (hasUnsavedChanges) {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+      saveMutation.mutate(draft);
+    }
+  };
+
+  const handleManualSave = () => {
+    saveCurrentDraft();
+  };
+
+  const handleBack = async () => {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    const draft = latestDraft.current;
+    const hasUnsavedChanges =
+      draft.title.trim() !== doc?.title
+      || draft.content !== (doc?.content || '');
+
+    if (hasUnsavedChanges) {
+      try {
+        await saveMutation.mutateAsync(draft);
+      } catch {
+        return;
+      }
+    }
+
+    router.push(`/projects/${projectId}/docs`);
   };
 
   if (isLoading) {
@@ -109,7 +145,7 @@ export default function DocEditorPage() {
       {/* Top bar */}
       <div className="flex items-center justify-between gap-4">
         <button
-          onClick={() => router.push(`/projects/${projectId}/docs`)}
+          onClick={handleBack}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors shrink-0"
         >
           <ArrowLeft size={15} />
@@ -169,6 +205,9 @@ export default function DocEditorPage() {
         <input
           value={title}
           onChange={handleTitleChange}
+          onBlur={() => {
+            if (isDirty) saveCurrentDraft();
+          }}
           placeholder="Document title…"
           className="w-full text-3xl font-bold text-gray-900 focus:outline-none placeholder:text-gray-300 bg-transparent"
         />
@@ -181,7 +220,12 @@ export default function DocEditorPage() {
         }}
         className={mode === 'view' ? 'cursor-text' : undefined}
       >
-        <RichTextEditor content={content} onChange={handleContentChange} editable={mode === 'edit'} />
+        <RichTextEditor
+          content={content}
+          onChange={handleContentChange}
+          onBlur={handleContentBlur}
+          editable={mode === 'edit'}
+        />
       </div>
     </div>
   );
