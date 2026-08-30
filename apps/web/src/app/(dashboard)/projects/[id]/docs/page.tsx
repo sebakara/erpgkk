@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, FileText, Clock, User, Trash2 } from 'lucide-react';
@@ -113,34 +114,39 @@ export default function DocsPage() {
           {docs.map((doc) => (
             <div
               key={doc.id}
-              onClick={() => router.push(`/projects/${projectId}/docs/${doc.id}`)}
-              className="bg-white rounded-xl border border-gray-200 px-5 py-4 flex items-center gap-4 hover:border-primary-200 hover:shadow-sm transition-all cursor-pointer group"
+              className="bg-white rounded-xl border border-gray-200 flex items-center hover:border-primary-200 hover:shadow-sm transition-all group"
             >
-              <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
-                <FileText size={16} className="text-indigo-500" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-gray-900 truncate">{doc.title}</p>
-                <div className="flex items-center gap-3 mt-0.5">
-                  {doc.author_name && (
-                    <span className="flex items-center gap-1 text-xs text-gray-400">
-                      <User size={11} />
-                      {doc.author_name}
-                    </span>
-                  )}
-                  <span className="flex items-center gap-1 text-xs text-gray-400">
-                    <Clock size={11} />
-                    {formatDate(doc.updated_at)}
-                  </span>
-                  <span className="text-xs text-gray-300">v{doc.version}</span>
+              <Link
+                href={`/projects/${projectId}/docs/${doc.id}`}
+                className="min-w-0 flex flex-1 items-center gap-4 px-5 py-4 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                aria-label={`Open ${doc.title}`}
+              >
+                <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                  <FileText size={16} className="text-indigo-500" />
                 </div>
-              </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 truncate">{doc.title}</p>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    {doc.author_name && (
+                      <span className="flex items-center gap-1 text-xs text-gray-400">
+                        <User size={11} />
+                        {doc.author_name}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1 text-xs text-gray-400">
+                      <Clock size={11} />
+                      {formatDate(doc.updated_at)}
+                    </span>
+                    <span className="text-xs text-gray-300">v{doc.version}</span>
+                  </div>
+                </div>
+              </Link>
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
+                onClick={() => {
                   if (confirm('Delete this document?')) deleteMutation.mutate(doc.id);
                 }}
-                className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-2 mr-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                aria-label={`Delete ${doc.title}`}
               >
                 <Trash2 size={15} />
               </button>
