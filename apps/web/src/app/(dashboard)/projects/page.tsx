@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi, departmentsApi } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -14,6 +14,11 @@ export default function ProjectsPage() {
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', icon: '📁', color: '#4f46e5', department_id: '' });
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: departmentsApi.list, enabled: showNew });
+
+  useEffect(() => {
+    const rnd = (departments as any[]).find((d) => /r\s*&\s*d|engineering/i.test(d.name));
+    if (rnd) setForm((current) => current.department_id ? current : { ...current, department_id: rnd.id });
+  }, [departments]);
 
   const createMutation = useMutation({
     mutationFn: (data: any) => projectsApi.create(data),

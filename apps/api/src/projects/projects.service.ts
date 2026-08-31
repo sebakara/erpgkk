@@ -3,6 +3,7 @@ import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
 import { v4 as uuid } from 'uuid';
 import { ChatService } from '../chat/chat.service';
+import { isEngineeringDepartment } from '../common/access/engineering';
 
 @Injectable()
 export class ProjectsService {
@@ -17,7 +18,7 @@ export class ProjectsService {
   }
 
   private async accessibleProjects(companyId: string, userId: string, userRole?: string) {
-    if (userRole === 'admin') {
+    if (userRole === 'admin' || await this.headsEngineering(companyId, userId)) {
       return this.knex('projects as p')
         .where('p.company_id', companyId)
         .whereNull('p.deleted_at')
@@ -114,7 +115,17 @@ export class ProjectsService {
 
   async create(companyId: string, ownerId: string, data: { name: string; description?: string; color?: string; icon?: string; department_id?: string }) {
     const id = uuid();
-    await this.knex('projects').insert({ id, company_id: companyId, owner_id: ownerId, ...data });
+    const department_id = (await this.engineeringDepartmentId(companyId)) || data.department_id || null;
+    await this.knex('projects').insert({
+      id,
+      company_id: companyId,
+      owner_id: ownerId,
+      name: data.name,
+      description: data.description,
+      color: data.color,
+      icon: data.icon,
+      department_id,
+    });
     await this.knex('project_members').insert({ id: uuid(), project_id: id, user_id: ownerId, role: 'owner' });
     await this.chatService?.getOrCreateProject(id, companyId);
     return this.findById(id, companyId);
@@ -138,6 +149,22 @@ export class ProjectsService {
 
   remove(id: string, companyId: string) {
     return this.knex('projects').where({ id, company_id: companyId }).update({ deleted_at: new Date() });
+  }
+
+  private async headsEngineering(companyId: string, userId: string) {
+    const headed = await this.knex('departments')
+      .where({ company_id: companyId, manager_id: userId })
+      .whereNull('deleted_at')
+      .select('name');
+    return headed.some((dept) => isEngineeringDepartment(dept.name));
+  }
+
+  private async engineeringDepartmentId(companyId: string) {
+    const depts = await this.knex('departments')
+      .where({ company_id: companyId })
+      .whereNull('deleted_at')
+      .select('id', 'name');
+    return depts.find((dept) => isEngineeringDepartment(dept.name))?.id ?? null;
   }
 
   async analytics(id: string) {

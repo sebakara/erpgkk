@@ -2,29 +2,68 @@
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { projectsApi } from '@/lib/api';
+import { projectsApi, usersApi } from '@/lib/api';
+import { getInitials } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth.store';
 import toast from 'react-hot-toast';
+import { UserPlus, X } from 'lucide-react';
 
 export default function ProjectSettingsPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const canManage = user?.role === 'admin' || user?.role === 'manager';
   const { data: project, isLoading } = useQuery({ queryKey: ['project', id], queryFn: () => projectsApi.get(id) });
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employees'],
+    queryFn: usersApi.list,
+    enabled: canManage,
+  });
 
   const [form, setForm] = useState<any>(null);
+  const [addUserId, setAddUserId] = useState('');
+
+  const refreshProject = () => {
+    qc.invalidateQueries({ queryKey: ['project', id] });
+    qc.invalidateQueries({ queryKey: ['projects'] });
+    qc.invalidateQueries({ queryKey: ['project-members', id] });
+  };
 
   const updateMutation = useMutation({
     mutationFn: (data: any) => projectsApi.update(id, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['project', id] });
+      refreshProject();
       toast.success('Project updated');
     },
     onError: () => toast.error('Failed to update project'),
+  });
+
+  const addMemberMutation = useMutation({
+    mutationFn: (userId: string) => projectsApi.addMember(id, { userId, role: 'member' }),
+    onSuccess: () => {
+      setAddUserId('');
+      refreshProject();
+      toast.success('Developer added to project');
+    },
+    onError: () => toast.error('Failed to add developer'),
+  });
+
+  const removeMemberMutation = useMutation({
+    mutationFn: (userId: string) => projectsApi.removeMember(id, userId),
+    onSuccess: () => {
+      refreshProject();
+      toast.success('Developer removed from project');
+    },
+    onError: () => toast.error('Failed to remove developer'),
   });
 
   if (isLoading) return <div className="flex items-center justify-center h-40"><div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" /></div>;
   if (!project) return null;
 
   const f = form ?? project;
+  const members = project.members ?? [];
+  const memberIds = new Set(members.map((m: any) => m.id));
+  const available = (employees as any[]).filter((e) => e.is_active !== false && !memberIds.has(e.id));
 
   return (
     <div className="max-w-lg space-y-5">
@@ -90,6 +129,67 @@ export default function ProjectSettingsPage() {
           {updateMutation.isPending ? 'Saving…' : 'Save changes'}
         </button>
       </div>
+
+      {canManage && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4">
+          <h2 className="font-semibold text-gray-900">Team</h2>
+          <p className="text-sm text-gray-500">Assign developers to this project.</p>
+
+          <div className="flex gap-2">
+            <select
+              value={addUserId}
+              onChange={(e) => setAddUserId(e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+            >
+              <option value="">Select a developer…</option>
+              {available.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.first_name} {e.last_name}{e.job_title ? ` · ${e.job_title}` : ''}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!addUserId || addMemberMutation.isPending}
+              onClick={() => addMemberMutation.mutate(addUserId)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50"
+            >
+              <UserPlus size={14} /> Add
+            </button>
+          </div>
+
+          <div className="divide-y divide-gray-100">
+            {members.length === 0 && (
+              <p className="text-sm text-gray-400 py-3">No developers assigned yet.</p>
+            )}
+            {members.map((m: any) => (
+              <div key={m.id} className="flex items-center gap-3 py-2.5">
+                {m.avatar_url ? (
+                  <img src={m.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">
+                    {getInitials(`${m.first_name} ${m.last_name}`)}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{m.first_name} {m.last_name}</p>
+                  <p className="text-xs text-gray-400 capitalize">{m.role ?? 'member'}</p>
+                </div>
+                {m.role !== 'owner' && (
+                  <button
+                    type="button"
+                    onClick={() => removeMemberMutation.mutate(m.id)}
+                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md"
+                    aria-label={`Remove ${m.first_name}`}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
