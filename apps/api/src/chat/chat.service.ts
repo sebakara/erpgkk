@@ -5,7 +5,7 @@ import { KNEX_CONNECTION } from '../database/database.module';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { LeaveService } from '../hr/leave/leave.service';
 import { IssuesService } from '../issues/issues.service';
-import { isEngineeringDepartment } from '../common/access/engineering';
+import { canManageAllProjects, engineeringHeadIds } from '../common/access/engineering';
 
 const LEAVE_TYPES = ['annual', 'sick', 'emergency', 'unpaid', 'maternity', 'paternity'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -332,7 +332,7 @@ export class ChatService {
     if (assigned) return true;
     const project = await this.knex('projects').where({ id: projectId }).first();
     if (!project) return false;
-    if (await this.headsEngineering(project.company_id, userId)) return true;
+    if (await canManageAllProjects(this.knex, project.company_id, userId, role)) return true;
     if (!project.department_id) return false;
     const head = await this.knex('departments').where({ id: project.department_id, manager_id: userId }).first();
     return !!head;
@@ -350,7 +350,7 @@ export class ChatService {
   }
 
   private async accessibleProjects(userId: string, companyId: string, role?: string) {
-    if (role === 'admin' || await this.headsEngineering(companyId, userId)) {
+    if (await canManageAllProjects(this.knex, companyId, userId, role)) {
       return this.knex('projects').where({ company_id: companyId }).whereNull('deleted_at').select('id');
     }
     const managedDepts = await this.knex('departments').where({ company_id: companyId, manager_id: userId }).pluck('id');
@@ -389,28 +389,10 @@ export class ChatService {
       const members = await this.knex('project_members').where('project_id', conv.project_id).pluck('user_id');
       const assignees = await this.knex('issues').where('project_id', conv.project_id).whereNotNull('assignee_id').pluck('assignee_id');
       const admins = await this.knex('users').where({ company_id: conv.company_id, role: 'admin', is_active: true }).pluck('id');
-      const engHeads = await this.engineeringHeadIds(conv.company_id);
+      const engHeads = await engineeringHeadIds(this.knex, conv.company_id);
       return [...new Set([...members, ...assignees, ...admins, ...engHeads])];
     }
     return [];
-  }
-
-  private async headsEngineering(companyId: string, userId: string) {
-    const headed = await this.knex('departments')
-      .where({ company_id: companyId, manager_id: userId })
-      .whereNull('deleted_at')
-      .select('name');
-    return headed.some((dept) => isEngineeringDepartment(dept.name));
-  }
-
-  private async engineeringHeadIds(companyId: string) {
-    const depts = await this.knex('departments')
-      .where({ company_id: companyId })
-      .whereNull('deleted_at')
-      .select('manager_id', 'name');
-    return depts
-      .filter((dept) => isEngineeringDepartment(dept.name) && dept.manager_id)
-      .map((dept) => dept.manager_id);
   }
 
   private async threadMeta(convId: string, userId: string) {

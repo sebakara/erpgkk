@@ -3,7 +3,7 @@ import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
 import { v4 as uuid } from 'uuid';
 import { ChatService } from '../chat/chat.service';
-import { isEngineeringDepartment } from '../common/access/engineering';
+import { canManageAllProjects, pickEngineeringDepartment } from '../common/access/engineering';
 
 @Injectable()
 export class ProjectsService {
@@ -18,7 +18,7 @@ export class ProjectsService {
   }
 
   private async accessibleProjects(companyId: string, userId: string, userRole?: string) {
-    if (userRole === 'admin' || await this.headsEngineering(companyId, userId)) {
+    if (await canManageAllProjects(this.knex, companyId, userId, userRole)) {
       return this.knex('projects as p')
         .where('p.company_id', companyId)
         .whereNull('p.deleted_at')
@@ -151,20 +151,12 @@ export class ProjectsService {
     return this.knex('projects').where({ id, company_id: companyId }).update({ deleted_at: new Date() });
   }
 
-  private async headsEngineering(companyId: string, userId: string) {
-    const headed = await this.knex('departments')
-      .where({ company_id: companyId, manager_id: userId })
-      .whereNull('deleted_at')
-      .select('name');
-    return headed.some((dept) => isEngineeringDepartment(dept.name));
-  }
-
   private async engineeringDepartmentId(companyId: string) {
     const depts = await this.knex('departments')
       .where({ company_id: companyId })
       .whereNull('deleted_at')
       .select('id', 'name');
-    return depts.find((dept) => isEngineeringDepartment(dept.name))?.id ?? null;
+    return pickEngineeringDepartment(depts)?.id ?? null;
   }
 
   async analytics(id: string) {

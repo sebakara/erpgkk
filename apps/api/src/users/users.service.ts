@@ -26,6 +26,10 @@ export class UsersService {
         this.knex.raw("CONCAT(m.first_name, ' ', m.last_name) as reports_to_name"),
         'm.job_title as reports_to_job_title',
         'm.avatar_url as reports_to_avatar',
+        'u.id',
+        'u.company_id',
+        'u.role',
+        'u.job_title',
       )
       .first();
   }
