@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Save, CheckCircle, Pencil, Eye } from 'lucide-react';
@@ -24,7 +24,6 @@ export default function DocEditorPage() {
   const [isDirty, setIsDirty] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
-  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestDraft = useRef<DocDraft>({ title: '', content: '' });
 
   const { data: doc, isLoading } = useQuery<Doc>({
@@ -64,69 +63,32 @@ export default function DocEditorPage() {
     onError: () => toast.error('Failed to save'),
   });
 
-  const scheduleAutoSave = useCallback((draft: DocDraft) => {
-    setIsDirty(true);
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(() => {
-      saveMutation.mutate(draft);
-    }, 1000);
-  }, [saveMutation]);
-
-  useEffect(() => {
-    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-  }, []);
-
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const draft = { ...latestDraft.current, title: e.target.value };
     latestDraft.current = draft;
     setTitle(draft.title);
-    scheduleAutoSave(draft);
+    setIsDirty(true);
   };
 
   const handleContentChange = (html: string) => {
     const draft = { ...latestDraft.current, content: html };
     latestDraft.current = draft;
     setContent(draft.content);
-    scheduleAutoSave(draft);
+    setIsDirty(true);
   };
 
   const saveCurrentDraft = () => {
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     saveMutation.mutate(latestDraft.current);
-  };
-
-  const handleContentBlur = (html: string) => {
-    const draft = { ...latestDraft.current, content: html };
-    latestDraft.current = draft;
-    setContent(draft.content);
-    const hasUnsavedChanges =
-      draft.title.trim() !== doc?.title
-      || draft.content !== (doc?.content || '');
-    if (hasUnsavedChanges) {
-      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-      saveMutation.mutate(draft);
-    }
   };
 
   const handleManualSave = () => {
     saveCurrentDraft();
   };
 
-  const handleBack = async () => {
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    const draft = latestDraft.current;
-    const hasUnsavedChanges =
-      draft.title.trim() !== doc?.title
-      || draft.content !== (doc?.content || '');
-
-    if (hasUnsavedChanges) {
-      try {
-        await saveMutation.mutateAsync(draft);
-      } catch {
-        return;
-      }
+  const handleBack = () => {
+    if (isDirty && !confirm('Discard your unsaved document changes?')) {
+      return;
     }
-
     router.push(`/projects/${projectId}/docs`);
   };
 
@@ -156,7 +118,7 @@ export default function DocEditorPage() {
           {mode === 'edit' && (
             <>
               {saveMutation.isPending && <span>Saving…</span>}
-              {!saveMutation.isPending && lastSaved && (
+              {!saveMutation.isPending && !isDirty && lastSaved && (
                 <span className="flex items-center gap-1">
                   <CheckCircle size={12} className="text-green-500" />
                   Saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -165,7 +127,7 @@ export default function DocEditorPage() {
               {isDirty && !saveMutation.isPending && <span className="text-amber-500">Unsaved</span>}
               <button
                 onClick={handleManualSave}
-                disabled={saveMutation.isPending}
+                disabled={saveMutation.isPending || !isDirty}
                 className="flex items-center gap-1.5 text-xs font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors"
               >
                 <Save size={12} />
@@ -205,9 +167,6 @@ export default function DocEditorPage() {
         <input
           value={title}
           onChange={handleTitleChange}
-          onBlur={() => {
-            if (isDirty) saveCurrentDraft();
-          }}
           placeholder="Document title…"
           className="w-full text-3xl font-bold text-gray-900 focus:outline-none placeholder:text-gray-300 bg-transparent"
         />
@@ -223,7 +182,6 @@ export default function DocEditorPage() {
         <RichTextEditor
           content={content}
           onChange={handleContentChange}
-          onBlur={handleContentBlur}
           editable={mode === 'edit'}
         />
       </div>

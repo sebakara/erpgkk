@@ -11,11 +11,10 @@ import { cn } from '@/lib/utils';
 interface Props {
   content: string;
   onChange: (html: string) => void;
-  onBlur?: (html: string) => void;
   editable?: boolean;
 }
 
-export function RichTextEditor({ content, onChange, onBlur, editable = true }: Props) {
+export function RichTextEditor({ content, onChange, editable = true }: Props) {
   const editor = useEditor({
     extensions: [StarterKit],
     content: content || '<p></p>',
@@ -23,7 +22,6 @@ export function RichTextEditor({ content, onChange, onBlur, editable = true }: P
     immediatelyRender: false,
     shouldRerenderOnTransaction: true,
     onUpdate: ({ editor: ed }) => onChange(ed.getHTML()),
-    onBlur: ({ editor: ed }) => onBlur?.(ed.getHTML()),
     editorProps: {
       attributes: {
         class: 'prose prose-sm max-w-none focus:outline-none min-h-[400px] px-6 py-4 cursor-text',
