@@ -15,14 +15,16 @@ export function pickEngineeringDepartment<T extends { name: string }>(depts: T[]
     ?? depts.find((dept) => isEngineeringDepartment(dept.name));
 }
 
-/** Head of Engineering, R&D managers, or anyone who heads an engineering department. */
+const LEADERSHIP_ROLES = new Set(['admin', 'manager', 'hr']);
+
+/** Leadership (admin / manager / HR) and Head of Engineering see every company project. */
 export async function canManageAllProjects(
   knex: Knex,
   companyId: string,
   userId: string,
   userRole?: string,
 ): Promise<boolean> {
-  if (userRole === 'admin') return true;
+  if (userRole && LEADERSHIP_ROLES.has(userRole)) return true;
 
   const user = await knex('users as u')
     .leftJoin('departments as d', 'u.department_id', 'd.id')
@@ -31,9 +33,8 @@ export async function canManageAllProjects(
     .first();
 
   if (!user) return false;
-  if (user.role === 'admin') return true;
+  if (LEADERSHIP_ROLES.has(user.role)) return true;
   if (isEngineeringHeadTitle(user.job_title)) return true;
-  if (user.role === 'manager' && isEngineeringDepartment(user.department_name)) return true;
 
   const headed = await knex('departments')
     .where({ company_id: companyId, manager_id: userId })
