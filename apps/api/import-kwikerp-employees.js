@@ -3,7 +3,10 @@
  * Employee-only import from kwikerp.sql into the current GKK ERP database.
  *
  * Imports departments, users, department managers, reports_to, and onboarding
- * fields. Does not create a database, send invites, or import projects/leave.
+ * fields into the company that owns the projects (not merely slug `gkk`).
+ * Existing imported emails are moved into that workspace and attached to
+ * their department. Company projects are assigned to R&D Department.
+ * Does not create a database or send invites.
  *
  * Usage:
  *   node apps/api/import-kwikerp-employees.js
@@ -270,6 +273,20 @@ function log(action, message) {
 }
 
 async function resolveCompany(db) {
+  const withProjects = await db('projects')
+    .whereNull('deleted_at')
+    .select('company_id')
+    .count({ n: '*' })
+    .groupBy('company_id')
+    .orderBy('n', 'desc')
+    .first();
+  if (withProjects?.company_id) {
+    const company = await db('companies').where({ id: withProjects.company_id }).first();
+    if (company) {
+      company._project_count = Number(withProjects.n || 0);
+      return company;
+    }
+  }
   const bySlug = async (slug) => db('companies').where({ slug }).first();
   return (await bySlug('gkk'))
     || (await bySlug('kwikkoders'))
@@ -303,7 +320,10 @@ function userRow(id, companyId, deptId, reportsTo, passwordHash, person) {
 }
 
 async function importEmployees(db) {
-  const summary = { departments: { insert: 0, exist: 0 }, users: { insert: 0, exist: 0, skip: SKIPPED.length } };
+  const summary = {
+    departments: { insert: 0, exist: 0 },
+    users: { insert: 0, exist: 0, move: 0, skip: SKIPPED.length },
+  };
 
   console.log(`\nMode: ${APPLY ? 'APPLY (writes enabled)' : 'DRY-RUN (no writes)'}`);
 
@@ -311,7 +331,10 @@ async function importEmployees(db) {
   if (!company) {
     throw new Error('No company found in the current database. Create or seed a company first.');
   }
-  console.log(`\n── Company\n  USING    ${company.name} (${company.slug})`);
+  const projectNote = company._project_count != null
+    ? ` · ${company._project_count} projects`
+    : '';
+  console.log(`\n── Company\n  USING    ${company.name} (${company.slug})${projectNote}`);
 
   console.log('\n── Skipped source rows');
   for (const skip of SKIPPED) {
@@ -352,13 +375,25 @@ async function importEmployees(db) {
 
     if (existing) {
       userIdMap.set(person.src_id, existing.id);
-      summary.users.exist += 1;
-      log('EXIST', `[${person.role}] ${person.first_name} ${person.last_name} <${person.email}> · password ${DEFAULT_PASSWORD}`);
+      const deptId = person.dept_src_id ? deptIdMap.get(person.dept_src_id) || null : null;
+      const moved = existing.company_id !== company.id;
+      if (moved) summary.users.move += 1;
+      else summary.users.exist += 1;
+      log(
+        moved ? 'MOVE' : 'EXIST',
+        `[${person.role}] ${person.first_name} ${person.last_name} <${person.email}> · ${deptName} · password ${DEFAULT_PASSWORD}`,
+      );
       if (APPLY) {
         const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
         await db('users').where({ id: existing.id }).update({
+          company_id: company.id,
+          department_id: deptId,
           password_hash: passwordHash,
           role: person.role,
+          job_title: person.job_title,
+          phone: person.phone || existing.phone,
+          nid: person.nid || existing.nid,
+          address: person.address || existing.address,
           is_active: true,
           updated_at: new Date(),
         });
@@ -416,9 +451,28 @@ async function importEmployees(db) {
     }
   }
 
+  const rndId = deptIdMap.get(29);
+  console.log('\n── Projects');
+  if (rndId) {
+    const projectCount = await db('projects')
+      .where({ company_id: company.id })
+      .whereNull('deleted_at')
+      .count({ n: '*' })
+      .first();
+    log('SET', `all company projects → R&D Department (${projectCount?.n ?? 0})`);
+    if (APPLY) {
+      await db('projects')
+        .where({ company_id: company.id })
+        .whereNull('deleted_at')
+        .update({ department_id: rndId, updated_at: new Date() });
+    }
+  } else {
+    log('SKIP', 'R&D Department missing — left project departments unchanged');
+  }
+
   console.log('\n── Summary');
   console.log(`  Departments  insert ${summary.departments.insert}  exist ${summary.departments.exist}`);
-  console.log(`  Users        insert ${summary.users.insert}  exist ${summary.users.exist}  skip ${summary.users.skip}`);
+  console.log(`  Users        insert ${summary.users.insert}  exist ${summary.users.exist}  move ${summary.users.move}  skip ${summary.users.skip}`);
   if (!APPLY) {
     console.log('\nDry-run only. Re-run with --apply to write these rows.');
   } else {
