@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Plus, Search, Users2, Mail, Phone, Globe, Trash2, Pencil } from 'lucide-react';
 import { clientsApi } from '@/lib/api';
 import toast from 'react-hot-toast';
+import { CommercialOnly } from '@/components/layout/access-denied';
 
 const STATUS_STYLES: Record<string, string> = {
   prospect:  'bg-yellow-100 text-yellow-700',
@@ -16,6 +17,14 @@ const STATUS_STYLES: Record<string, string> = {
 const EMPTY_FORM = { name: '', email: '', phone: '', website: '', industry: '', address: '', status: 'prospect', notes: '' };
 
 export default function ClientsPage() {
+  return (
+    <CommercialOnly>
+      <ClientsPageBody />
+    </CommercialOnly>
+  );
+}
+
+function ClientsPageBody() {
   const router = useRouter();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');

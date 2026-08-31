@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'manager' | 'employee';
+export type Role = 'admin' | 'manager' | 'employee' | 'hr';
 export type IssueType = 'bug' | 'task' | 'story' | 'epic';
 export type IssueStatus = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done';
 export type IssuePriority = 'low' | 'medium' | 'high' | 'urgent';
@@ -10,6 +10,7 @@ export interface User {
   id: string;
   company_id: string;
   department_id?: string;
+  department_name?: string;
   email: string;
   first_name: string;
   last_name: string;

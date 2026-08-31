@@ -50,7 +50,7 @@ export class UsersService {
       )
       .orderBy('u.first_name');
 
-    if (!callerId || callerRole === 'admin') return q;
+    if (!callerId || callerRole === 'admin' || callerRole === 'manager' || callerRole === 'hr') return q;
 
     // Check if the caller is a dept head
     const managedDepts = await this.knex('departments')

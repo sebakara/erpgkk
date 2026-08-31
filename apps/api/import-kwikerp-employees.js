@@ -47,7 +47,7 @@ const SRC_USERS = [
   {
     src_id: 66, email: 'tricia.ingabire@kwikkoders.com',
     first_name: 'Tricia', last_name: 'Ingabire',
-    job_title: 'Head of Operations', role: 'manager',
+    job_title: 'Head of Operations', role: 'hr',
     phone: '+250784500003', dept_src_id: 35, reports_to_src_id: null,
     manager_dept_src_id: 35,
     address: 'Kigali, Kabeza', nid: '1199670053906282',
@@ -358,6 +358,7 @@ async function importEmployees(db) {
         const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
         await db('users').where({ id: existing.id }).update({
           password_hash: passwordHash,
+          role: person.role,
           is_active: true,
           updated_at: new Date(),
         });

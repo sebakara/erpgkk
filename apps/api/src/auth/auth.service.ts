@@ -62,7 +62,8 @@ export class AuthService {
 
     if (!user.is_active) throw new UnauthorizedException('Account disabled');
 
-    return this.buildTokenResponse(user);
+    const full = await this.usersService.findById(user.id);
+    return this.buildTokenResponse(full);
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {

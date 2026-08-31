@@ -14,18 +14,18 @@ export class LeaveController {
   @Get()
   @Roles(Role.Admin, Role.Manager, Role.Hr)
   findAll(@CurrentUser() user: any, @Query('userId') userId?: string) {
-    return this.leaveService.findAll(user.company_id, userId);
+    return this.leaveService.findAll(user, userId);
   }
 
   @Get('mine')
   mine(@CurrentUser() user: any) {
-    return this.leaveService.findAll(user.company_id, user.id);
+    return this.leaveService.findAll(user, user.id);
   }
 
   @Get('summary')
   @Roles(Role.Admin, Role.Manager, Role.Hr)
   summary(@CurrentUser() user: any) {
-    return this.leaveService.summary(user.company_id);
+    return this.leaveService.summary(user);
   }
 
   @Get(':id')
@@ -41,12 +41,12 @@ export class LeaveController {
   @Patch(':id/approve')
   @Roles(Role.Admin, Role.Manager, Role.Hr)
   approve(@Param('id') id: string, @CurrentUser() user: any, @Body() body: { note?: string }) {
-    return this.leaveService.approve(id, user.id, body.note);
+    return this.leaveService.approve(id, user, body.note);
   }
 
   @Patch(':id/reject')
   @Roles(Role.Admin, Role.Manager, Role.Hr)
   reject(@Param('id') id: string, @CurrentUser() user: any, @Body() body: { note?: string }) {
-    return this.leaveService.reject(id, user.id, body.note);
+    return this.leaveService.reject(id, user, body.note);
   }
 }

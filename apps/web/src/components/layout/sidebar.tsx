@@ -5,26 +5,31 @@ import { useAuthStore } from '@/store/auth.store';
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { chatApi } from '@/lib/api';
+import { useCommercialAccess } from '@/lib/use-commercial-access';
 import {
   LayoutDashboard, FolderOpen, Users, Bell, LogOut, Settings, MessageSquare,
   Users2, Mail,
 } from 'lucide-react';
 
 const ALL_NAV = [
-  { label: 'Dashboard',    href: '/dashboard',    icon: LayoutDashboard, roles: ['admin', 'manager', 'employee'] },
-  { label: 'Projects',     href: '/projects',     icon: FolderOpen,      roles: ['admin', 'manager', 'employee'] },
-  { label: 'HR',           href: '/hr',           icon: Users,           roles: ['admin', 'manager', 'employee'] },
-  { label: 'Clients',      href: '/clients',      icon: Users2,          roles: ['admin', 'manager'] },
-  { label: 'Newsletters',  href: '/newsletters',  icon: Mail,            roles: ['admin', 'manager'] },
-  { label: 'Messages',     href: '/chat',         icon: MessageSquare,   roles: ['admin', 'manager', 'employee'] },
-  { label: 'Notifications',href: '/notifications',icon: Bell,            roles: ['admin', 'manager', 'employee'] },
-  { label: 'Settings',     href: '/settings',     icon: Settings,        roles: ['admin', 'manager'] },
+  { label: 'Dashboard',     href: '/dashboard',     icon: LayoutDashboard, roles: ['admin', 'manager', 'employee', 'hr'] },
+  { label: 'Projects',      href: '/projects',      icon: FolderOpen,      roles: ['admin', 'manager', 'employee'] },
+  { label: 'HR',            href: '/hr',            icon: Users,           roles: ['admin', 'manager', 'employee', 'hr'] },
+  { label: 'Clients',       href: '/clients',       icon: Users2,          access: 'commercial' as const },
+  { label: 'Newsletters',   href: '/newsletters',   icon: Mail,            access: 'commercial' as const },
+  { label: 'Messages',      href: '/chat',          icon: MessageSquare,   roles: ['admin', 'manager', 'employee', 'hr'] },
+  { label: 'Notifications', href: '/notifications', icon: Bell,            roles: ['admin', 'manager', 'employee', 'hr'] },
+  { label: 'Settings',      href: '/settings',      icon: Settings,        roles: ['admin'] },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
-  const nav = ALL_NAV.filter((n) => !user?.role || n.roles.includes(user.role));
+  const { allowed: commercial } = useCommercialAccess();
+  const nav = ALL_NAV.filter((item) => {
+    if ('access' in item && item.access === 'commercial') return commercial;
+    return !item.roles || !user?.role || item.roles.includes(user.role);
+  });
 
   const { data: unreadData } = useQuery({
     queryKey: ['chat-unread'],

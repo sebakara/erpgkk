@@ -2,10 +2,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { projectsApi, hrApi, issuesApi, leavePackagesApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
-import { formatDate, cn, getInitials } from '@/lib/utils';
+import { formatDate, cn } from '@/lib/utils';
 import { FolderOpen, Users, Calendar, TrendingUp, CheckCircle2, Clock, Circle } from 'lucide-react';
 import Link from 'next/link';
-import type { Issue, LeaveBalance } from '@/types';
+import type { Issue, LeaveBalance, Project } from '@/types';
+import { ProjectPeople } from '@/components/projects/project-people';
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
@@ -16,7 +17,7 @@ export default function DashboardPage() {
 
 /* ── Manager / Admin dashboard (unchanged) ─────────────────────────────── */
 function ManagerDashboard({ user }: { user: any }) {
-  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: projectsApi.list });
+  const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: projectsApi.list });
   const { data: announcements = [] } = useQuery({ queryKey: ['announcements'], queryFn: hrApi.announcements.list });
   const { data: leaveSummary = [] } = useQuery({ queryKey: ['leave-summary'], queryFn: hrApi.leave.summary });
 
@@ -53,14 +54,15 @@ function ManagerDashboard({ user }: { user: any }) {
             <p className="text-gray-400 text-sm">No projects yet</p>
           ) : (
             <div className="space-y-3">
-              {projects.slice(0, 5).map((p: any) => (
+              {projects.slice(0, 5).map((p) => (
                 <Link key={p.id} href={`/projects/${p.id}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors">
                   <span className="text-xl">{p.icon || '📁'}</span>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 truncate">{p.name}</p>
                     <p className="text-xs text-gray-500 capitalize">{p.status}</p>
                   </div>
-                  <span className={`w-2 h-2 rounded-full ${p.status === 'active' ? 'bg-green-400' : 'bg-gray-300'}`} />
+                  <ProjectPeople people={p.members} max={4} />
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${p.status === 'active' ? 'bg-green-400' : 'bg-gray-300'}`} />
                 </Link>
               ))}
             </div>

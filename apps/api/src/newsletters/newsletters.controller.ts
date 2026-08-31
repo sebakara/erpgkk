@@ -1,13 +1,11 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
 import { NewslettersService } from './newsletters.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
+import { CommercialAccessGuard } from '../common/guards/commercial-access.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Role } from '../common/enums';
 
 @Controller('newsletters')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, CommercialAccessGuard)
 export class NewslettersController {
   constructor(private newslettersService: NewslettersService) {}
 
@@ -22,25 +20,21 @@ export class NewslettersController {
   }
 
   @Post()
-  @Roles(Role.Admin, Role.Manager)
   create(@CurrentUser() user: any, @Body() body: any) {
     return this.newslettersService.create(user.company_id, user.id, body);
   }
 
   @Patch(':id')
-  @Roles(Role.Admin, Role.Manager)
   update(@Param('id') id: string, @CurrentUser() user: any, @Body() body: any) {
     return this.newslettersService.update(id, user.company_id, body);
   }
 
   @Delete(':id')
-  @Roles(Role.Admin, Role.Manager)
   remove(@Param('id') id: string, @CurrentUser() user: any) {
     return this.newslettersService.remove(id, user.company_id);
   }
 
   @Post(':id/send')
-  @Roles(Role.Admin, Role.Manager)
   send(
     @Param('id') id: string,
     @CurrentUser() user: any,

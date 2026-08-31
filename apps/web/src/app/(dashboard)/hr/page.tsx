@@ -18,7 +18,6 @@ import {
   performanceApi,
   leavePackagesApi,
   chatApi,
-  projectsApi,
 } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
@@ -146,10 +145,12 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
   const approve = useMutation({
     mutationFn: (id: string) => hrApi.leave.approve(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['leaves'] }); toast.success('Leave approved'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'You cannot approve this leave request'),
   });
   const reject = useMutation({
     mutationFn: (id: string) => hrApi.leave.reject(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['leaves'] }); toast.success('Leave rejected'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'You cannot reject this leave request'),
   });
 
   // Group balance by leave_type (pick the first active package per type)
@@ -239,7 +240,9 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
       {/* Leave Requests */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-gray-900">{isManager ? 'All Leave Requests' : 'My Leave Requests'}</h2>
+          <h2 className="font-semibold text-gray-900">
+            {user?.role === 'employee' ? 'My Leave Requests' : user?.role === 'manager' ? 'Department Leave Requests' : 'All Leave Requests'}
+          </h2>
           <button
             onClick={openLeaveModal}
             className="flex items-center gap-1.5 bg-primary-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary-700"
@@ -408,8 +411,8 @@ function StandupNotesTab() {
     queryFn: usersApi.list,
   });
   const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
-    queryKey: ['projects'],
-    queryFn: projectsApi.list,
+    queryKey: ['standup-note-projects'],
+    queryFn: hrApi.standupNotes.projects,
   });
   const { data: notes = [], isLoading: notesLoading } = useQuery<StandupNote[]>({
     queryKey: ['standup-notes', date],
@@ -915,6 +918,7 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
 const ROLE_COLOR: Record<string, string> = {
   admin: 'bg-purple-100 text-purple-700',
   manager: 'bg-blue-100 text-blue-700',
+  hr: 'bg-teal-100 text-teal-700',
   employee: 'bg-gray-100 text-gray-600',
 };
 

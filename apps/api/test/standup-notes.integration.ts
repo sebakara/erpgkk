@@ -24,7 +24,7 @@ function createDatabase() {
   });
 }
 
-test('standup notes remain private to their author and respect manager scope', async () => {
+test('standup notes remain private to their author and allow every manager to record notes', async () => {
   const database = createDatabase();
   const transaction = await database.transaction();
 
@@ -39,6 +39,7 @@ test('standup notes remain private to their author and respect manager scope', a
       otherAdmin: uuid(),
       manager: uuid(),
       otherManager: uuid(),
+      unheadedManager: uuid(),
       developer: uuid(),
       outsideDeveloper: uuid(),
       managedProject: uuid(),
@@ -101,6 +102,17 @@ test('standup notes remain private to their author and respect manager scope', a
         is_active: true,
       },
       {
+        id: ids.unheadedManager,
+        company_id: ids.company,
+        department_id: ids.otherDepartment,
+        email: `manager-${uuid()}@example.test`,
+        password_hash: passwordHash,
+        first_name: 'Product',
+        last_name: 'Manager',
+        role: Role.Manager,
+        is_active: true,
+      },
+      {
         id: ids.developer,
         company_id: ids.company,
         department_id: ids.managedDepartment,
@@ -159,6 +171,7 @@ test('standup notes remain private to their author and respect manager scope', a
     const otherAdmin = { id: ids.otherAdmin, company_id: ids.company, role: Role.Admin };
     const manager = { id: ids.manager, company_id: ids.company, role: Role.Manager };
     const otherManager = { id: ids.otherManager, company_id: ids.company, role: Role.Manager };
+    const unheadedManager = { id: ids.unheadedManager, company_id: ids.company, role: Role.Manager };
     const developer = { id: ids.developer, company_id: ids.company, role: Role.Employee };
 
     const adminNote = await service.save(admin, ids.developer, {
@@ -207,22 +220,30 @@ test('standup notes remain private to their author and respect manager scope', a
         .some((note) => note.content === 'Only the author should see this.'),
     );
 
-    await assert.rejects(
-      service.save(otherManager, ids.developer, {
-        standup_date: date,
-        content: 'Not allowed',
-        project_id: ids.otherProject,
-      }),
-      (error: unknown) => error instanceof ForbiddenException,
-    );
-    await assert.rejects(
-      service.save(manager, ids.developer, {
-        standup_date: date,
-        content: 'Project not allowed',
-        project_id: ids.otherProject,
-      }),
-      (error: unknown) => error instanceof ForbiddenException,
-    );
+    const crossDeptNote = await service.save(otherManager, ids.developer, {
+      standup_date: date,
+      content: 'Managers can note any teammate.',
+      project_id: ids.otherProject,
+    });
+    assert.equal(crossDeptNote.project.id, ids.otherProject);
+
+    const unheadedNote = await service.save(unheadedManager, ids.developer, {
+      standup_date: date,
+      content: 'Managers do not need to be department heads.',
+      project_id: ids.managedProject,
+    });
+    assert.equal(unheadedNote.project.id, ids.managedProject);
+
+    await service.save(manager, ids.developer, {
+      standup_date: date,
+      content: 'Managers can attach any company project.',
+      project_id: ids.otherProject,
+    });
+    assert.equal((await service.findByProject(manager, ids.otherProject)).length, 1);
+
+    const companyProjects = await service.listProjects(unheadedManager);
+    assert.equal(companyProjects.length, 2);
+
     await assert.rejects(
       service.save(admin, ids.outsideDeveloper, {
         standup_date: date,

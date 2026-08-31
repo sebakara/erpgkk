@@ -5,10 +5,12 @@ import { projectsApi, departmentsApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Plus, FolderOpen } from 'lucide-react';
 import Link from 'next/link';
+import { ProjectPeople } from '@/components/projects/project-people';
+import type { Project } from '@/types';
 
 export default function ProjectsPage() {
   const qc = useQueryClient();
-  const { data: projects = [], isLoading } = useQuery({ queryKey: ['projects'], queryFn: projectsApi.list });
+  const { data: projects = [], isLoading } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: projectsApi.list });
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', icon: '📁', color: '#4f46e5', department_id: '' });
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: departmentsApi.list, enabled: showNew });
@@ -41,7 +43,7 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map((p: any) => (
+          {projects.map((p) => (
             <Link key={p.id} href={`/projects/${p.id}`}
               className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow group">
               <div className="flex items-start justify-between mb-3">
@@ -50,9 +52,12 @@ export default function ProjectsPage() {
               </div>
               <h3 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">{p.name}</h3>
               {p.description && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{p.description}</p>}
-              <div className="mt-3 pt-3 border-t border-gray-50 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ background: p.color || '#4f46e5' }} />
-                <span className="text-xs text-gray-400">View board →</span>
+              <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color || '#4f46e5' }} />
+                  <span className="text-xs text-gray-400 truncate">View board →</span>
+                </div>
+                <ProjectPeople people={p.members} />
               </div>
             </Link>
           ))}

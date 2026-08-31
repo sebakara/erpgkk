@@ -95,6 +95,7 @@ export const hrApi = {
   },
   standupNotes: {
     list: (date: string) => api.get('/hr/standup-notes', { params: { date } }).then((r) => r.data),
+    projects: () => api.get('/hr/standup-notes/projects').then((r) => r.data),
     byProject: (projectId: string, params?: { dateFrom?: string; dateTo?: string }) =>
       api.get(`/hr/standup-notes/project/${projectId}`, { params }).then((r) => r.data),
     save: (

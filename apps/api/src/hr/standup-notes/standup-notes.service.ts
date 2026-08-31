@@ -63,6 +63,15 @@ export class StandupNotesService {
     return this.formatNotes(notes);
   }
 
+  async listProjects(actor: StandupNotesActor) {
+    this.assertLeadership(actor);
+    return this.knex('projects as p')
+      .where('p.company_id', actor.company_id)
+      .whereNull('p.deleted_at')
+      .select('p.id', 'p.name', 'p.color', 'p.icon', 'p.status', 'p.department_id')
+      .orderBy('p.name');
+  }
+
   async findByProject(
     actor: StandupNotesActor,
     projectId: string,
@@ -207,43 +216,21 @@ export class StandupNotesService {
         company_id: actor.company_id,
         is_active: true,
       })
-      .select('id', 'department_id')
+      .select('id')
       .first();
 
     if (!subject) throw new NotFoundException('Developer not found');
-    if (actor.role === Role.Admin) return;
-
-    const managesDepartment = subject.department_id
-      ? await this.knex('departments')
-        .where({
-          id: subject.department_id,
-          company_id: actor.company_id,
-          manager_id: actor.id,
-        })
-        .first('id')
-      : null;
-
-    if (!managesDepartment) {
-      throw new ForbiddenException('You can only write notes about developers in your departments');
-    }
   }
 
   private async assertCanUseProjects(actor: StandupNotesActor, projectIds: string[]) {
     if (!projectIds.length) return;
 
-    const query = this.knex('projects as p')
+    const allowedIds = await this.knex('projects as p')
       .where('p.company_id', actor.company_id)
       .whereNull('p.deleted_at')
-      .whereIn('p.id', projectIds);
+      .whereIn('p.id', projectIds)
+      .pluck('p.id');
 
-    if (actor.role === Role.Manager) {
-      const managedDepartmentIds = await this.knex('departments')
-        .where({ company_id: actor.company_id, manager_id: actor.id })
-        .pluck('id');
-      query.whereIn('p.department_id', managedDepartmentIds);
-    }
-
-    const allowedIds = await query.pluck('p.id');
     if (allowedIds.length !== projectIds.length) {
       throw new ForbiddenException('One or more selected projects are not accessible');
     }

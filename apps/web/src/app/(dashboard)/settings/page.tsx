@@ -311,6 +311,7 @@ function MembersSection() {
   const ROLE_COLOR: Record<string, string> = {
     admin: 'bg-purple-100 text-purple-700',
     manager: 'bg-blue-100 text-blue-700',
+    hr: 'bg-teal-100 text-teal-700',
     employee: 'bg-gray-100 text-gray-600',
   };
 

@@ -17,6 +17,11 @@ export class StandupNotesController {
     return this.standupNotes.findAll(user, date);
   }
 
+  @Get('projects')
+  listProjects(@CurrentUser() user: any) {
+    return this.standupNotes.listProjects(user);
+  }
+
   @Get('project/:projectId')
   findByProject(
     @CurrentUser() user: any,

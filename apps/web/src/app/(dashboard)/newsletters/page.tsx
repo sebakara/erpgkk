@@ -6,8 +6,17 @@ import { Plus, Mail, Send, FileText, Clock, Trash2, Users2 } from 'lucide-react'
 import { newslettersApi } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import { CommercialOnly } from '@/components/layout/access-denied';
 
 export default function NewslettersPage() {
+  return (
+    <CommercialOnly>
+      <NewslettersPageBody />
+    </CommercialOnly>
+  );
+}
+
+function NewslettersPageBody() {
   const router = useRouter();
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);

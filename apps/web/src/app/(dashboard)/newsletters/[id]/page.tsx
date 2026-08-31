@@ -7,8 +7,17 @@ import { newslettersApi, clientsApi } from '@/lib/api';
 import { RichTextEditor } from '@/components/docs/rich-text-editor';
 import { formatDate } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import { CommercialOnly } from '@/components/layout/access-denied';
 
 export default function NewsletterEditorPage() {
+  return (
+    <CommercialOnly>
+      <NewsletterEditorBody />
+    </CommercialOnly>
+  );
+}
+
+function NewsletterEditorBody() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const qc = useQueryClient();

@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Mail, Phone, Globe, MapPin, Tag, FileText, FolderOpen, Plus, X } from 'lucide-react';
 import { clientsApi, projectsApi } from '@/lib/api';
 import toast from 'react-hot-toast';
+import { CommercialOnly } from '@/components/layout/access-denied';
 
 const STATUS_STYLES: Record<string, string> = {
   prospect: 'bg-yellow-100 text-yellow-700',
@@ -14,6 +15,14 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default function ClientDetailPage() {
+  return (
+    <CommercialOnly>
+      <ClientDetailBody />
+    </CommercialOnly>
+  );
+}
+
+function ClientDetailBody() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const qc = useQueryClient();

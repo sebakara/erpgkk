@@ -1,13 +1,11 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { ClientsService } from './clients.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
+import { CommercialAccessGuard } from '../common/guards/commercial-access.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Role } from '../common/enums';
 
 @Controller('clients')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, CommercialAccessGuard)
 export class ClientsController {
   constructor(private clientsService: ClientsService) {}
 
@@ -22,31 +20,26 @@ export class ClientsController {
   }
 
   @Post()
-  @Roles(Role.Admin, Role.Manager)
   create(@CurrentUser() user: any, @Body() body: any) {
     return this.clientsService.create(user.company_id, body);
   }
 
   @Patch(':id')
-  @Roles(Role.Admin, Role.Manager)
   update(@Param('id') id: string, @CurrentUser() user: any, @Body() body: any) {
     return this.clientsService.update(id, user.company_id, body);
   }
 
   @Delete(':id')
-  @Roles(Role.Admin, Role.Manager)
   remove(@Param('id') id: string, @CurrentUser() user: any) {
     return this.clientsService.remove(id, user.company_id);
   }
 
   @Post(':id/projects/:projectId')
-  @Roles(Role.Admin, Role.Manager)
   linkProject(@Param('id') id: string, @Param('projectId') projectId: string) {
     return this.clientsService.linkProject(id, projectId);
   }
 
   @Delete(':id/projects/:projectId')
-  @Roles(Role.Admin, Role.Manager)
   unlinkProject(@Param('id') id: string, @Param('projectId') projectId: string) {
     return this.clientsService.unlinkProject(id, projectId);
   }

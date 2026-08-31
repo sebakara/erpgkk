@@ -12,6 +12,11 @@ export class ProjectsService {
   ) {}
 
   async findAll(companyId: string, userId: string, userRole?: string) {
+    const projects = await this.accessibleProjects(companyId, userId, userRole);
+    return this.attachPeople(projects);
+  }
+
+  private async accessibleProjects(companyId: string, userId: string, userRole?: string) {
     if (userRole === 'admin') {
       return this.knex('projects as p')
         .where('p.company_id', companyId)
@@ -20,13 +25,11 @@ export class ProjectsService {
         .orderBy('p.created_at', 'asc');
     }
 
-    // Find departments where this user is the manager (dept head)
     const managedDepts = await this.knex('departments')
       .where({ company_id: companyId, manager_id: userId })
       .pluck('id');
 
     if (managedDepts.length > 0) {
-      // Dept head: all projects in their department(s)
       return this.knex('projects as p')
         .where('p.company_id', companyId)
         .whereNull('p.deleted_at')
@@ -35,7 +38,6 @@ export class ProjectsService {
         .orderBy('p.created_at', 'asc');
     }
 
-    // Employee/HR: projects they're a member of OR have issues assigned to them
     return this.knex('projects as p')
       .where('p.company_id', companyId)
       .whereNull('p.deleted_at')
@@ -54,6 +56,50 @@ export class ProjectsService {
       })
       .select('p.*')
       .orderBy('p.created_at', 'asc');
+  }
+
+  private async attachPeople(projects: any[]) {
+    if (!projects.length) return projects;
+    const ids = projects.map((project) => project.id);
+
+    const [members, assignees] = await Promise.all([
+      this.knex('project_members as pm')
+        .join('users as u', 'pm.user_id', 'u.id')
+        .whereIn('pm.project_id', ids)
+        .select('pm.project_id', 'u.id', 'u.first_name', 'u.last_name', 'u.avatar_url'),
+      this.knex('issues as i')
+        .join('users as u', 'i.assignee_id', 'u.id')
+        .whereIn('i.project_id', ids)
+        .whereNotNull('i.assignee_id')
+        .select('i.project_id', 'u.id', 'u.first_name', 'u.last_name', 'u.avatar_url'),
+    ]);
+
+    const byProject = new Map<string, Map<string, {
+      id: string;
+      first_name: string;
+      last_name: string;
+      avatar_url?: string | null;
+    }>>();
+
+    for (const row of [...members, ...assignees]) {
+      if (!byProject.has(row.project_id)) byProject.set(row.project_id, new Map());
+      const people = byProject.get(row.project_id)!;
+      if (!people.has(row.id)) {
+        people.set(row.id, {
+          id: row.id,
+          first_name: row.first_name,
+          last_name: row.last_name,
+          avatar_url: row.avatar_url,
+        });
+      }
+    }
+
+    return projects.map((project) => ({
+      ...project,
+      members: [...(byProject.get(project.id)?.values() ?? [])].sort((a, b) =>
+        `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`),
+      ),
+    }));
   }
 
   async findById(id: string, companyId: string) {
