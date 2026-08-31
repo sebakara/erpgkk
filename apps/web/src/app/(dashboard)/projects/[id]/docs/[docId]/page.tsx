@@ -29,6 +29,7 @@ export default function DocEditorPage() {
   const { data: doc, isLoading } = useQuery<Doc>({
     queryKey: ['doc', projectId, docId],
     queryFn: () => docsApi.get(projectId, docId),
+    refetchOnMount: 'always',
   });
 
   useEffect(() => {
@@ -48,9 +49,9 @@ export default function DocEditorPage() {
         title: draft.title.trim(),
         content: draft.content,
       }),
-    onSuccess: (_savedDoc, savedDraft) => {
+    onSuccess: (savedDoc: Doc, savedDraft) => {
+      qc.setQueryData(['doc', projectId, docId], savedDoc);
       qc.invalidateQueries({ queryKey: ['docs', projectId] });
-      qc.invalidateQueries({ queryKey: ['doc', projectId, docId] });
       const currentDraft = latestDraft.current;
       if (
         currentDraft.title === savedDraft.title
@@ -162,7 +163,7 @@ export default function DocEditorPage() {
 
       {/* Title */}
       {mode === 'view' ? (
-        <h1 className="text-3xl font-bold text-gray-900">{title || 'Untitled'}</h1>
+        <h1 className="text-3xl font-bold text-gray-900">{title || doc.title || 'Untitled'}</h1>
       ) : (
         <input
           value={title}
@@ -180,7 +181,7 @@ export default function DocEditorPage() {
         className={mode === 'view' ? 'cursor-text' : undefined}
       >
         <RichTextEditor
-          content={content}
+          content={isDirty ? content : (doc.content || '')}
           onChange={handleContentChange}
           editable={mode === 'edit'}
         />
