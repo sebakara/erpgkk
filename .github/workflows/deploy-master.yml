@@ -55,7 +55,16 @@ jobs:
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY_PROD }}
 
       - name: Prune to production dependencies
-        run: pnpm prune --prod
+        run: |
+          # pnpm prune can drop gitignored build output (dist / .next).
+          # Keep the compiled API and Next.js app so production is not
+          # left running a stale PM2 process without standup-notes routes.
+          tar -cf /tmp/erpgkk-build.tar apps/api/dist apps/web/.next
+          test -f apps/api/dist/hr/standup-notes/standup-notes.controller.js
+          pnpm prune --prod
+          tar -xf /tmp/erpgkk-build.tar
+          test -f apps/api/dist/hr/standup-notes/standup-notes.controller.js
+          test -d apps/web/.next
 
       - name: Verify server prerequisites
         run: |
@@ -90,10 +99,28 @@ jobs:
             # Ensure uploads directory exists
             mkdir -p /var/www/erpgkk/uploads
 
-            # Start/reload PM2 as maic
             cd /var/www/erpgkk
-            pm2 startOrReload ecosystem.config.js --update-env
+            test -f apps/api/dist/hr/standup-notes/standup-notes.controller.js
+            test -f apps/api/dist/main.js
+
+            # Delete + start so PM2 cannot keep an old cwd/process whose
+            # dist predates standup-notes (startOrReload leaves it running
+            # when the new start fails).
+            pm2 delete gkkerp-api gkkerp-web || true
+            pm2 start ecosystem.config.js --update-env
             pm2 save
+
+            sleep 3
+            port=$(sed -n 's/^PORT=//p' apps/api/.env | tr -d '"')
+            port=${port:-3001}
+            code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${port}/api/hr/standup-notes" || true)
+            echo "API :${port} /api/hr/standup-notes -> ${code}"
+            if [ "$code" != "401" ]; then
+              echo "ERROR: standup-notes route is missing after deploy"
+              pm2 describe gkkerp-api || true
+              pm2 logs gkkerp-api --lines 50 --nostream || true
+              exit 1
+            fi
 
             echo "Deploy complete"
           '
