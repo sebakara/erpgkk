@@ -91,29 +91,26 @@ jobs:
 
       - name: Restart services
         run: |
-          ssh maic@109.199.96.234 '
+          ssh maic@109.199.96.234 bash -s <<'REMOTE'
             set -e
             export NVM_DIR="$HOME/.nvm"
             [ ! -s "$NVM_DIR/nvm.sh" ] || . "$NVM_DIR/nvm.sh"
 
-            # Ensure uploads directory exists
             mkdir -p /var/www/erpgkk/uploads
-
             cd /var/www/erpgkk
             test -f apps/api/dist/hr/standup-notes/standup-notes.controller.js
             test -f apps/api/dist/main.js
 
-            # Delete + start so PM2 cannot keep an old cwd/process whose
-            # dist predates standup-notes (startOrReload leaves it running
-            # when the new start fails).
+            # Delete + start so PM2 cannot keep an old process whose
+            # in-memory code predates standup-notes.
             pm2 delete gkkerp-api gkkerp-web || true
             pm2 start ecosystem.config.js --update-env
             pm2 save
 
-            sleep 3
-            port=$(sed -n 's/^PORT=//p' apps/api/.env | tr -d '"')
+            sleep 5
+            port=$(awk -F= '/^PORT=/{gsub(/"/, "", $2); print $2; exit}' apps/api/.env)
             port=${port:-3001}
-            code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${port}/api/hr/standup-notes" || true)
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/api/hr/standup-notes" || true)
             echo "API :${port} /api/hr/standup-notes -> ${code}"
             if [ "$code" != "401" ]; then
               echo "ERROR: standup-notes route is missing after deploy"
@@ -123,4 +120,5 @@ jobs:
             fi
 
             echo "Deploy complete"
-          '
+          REMOTE
+
