@@ -62,8 +62,9 @@ export class ProjectsService {
   private async attachPeople(projects: any[]) {
     if (!projects.length) return projects;
     const ids = projects.map((project) => project.id);
+    const departmentIds = [...new Set(projects.map((project) => project.department_id).filter(Boolean))];
 
-    const [members, assignees] = await Promise.all([
+    const [members, assignees, owners, deptPeople] = await Promise.all([
       this.knex('project_members as pm')
         .join('users as u', 'pm.user_id', 'u.id')
         .whereIn('pm.project_id', ids)
@@ -73,6 +74,16 @@ export class ProjectsService {
         .whereIn('i.project_id', ids)
         .whereNotNull('i.assignee_id')
         .select('i.project_id', 'u.id', 'u.first_name', 'u.last_name', 'u.avatar_url'),
+      this.knex('projects as p')
+        .join('users as u', 'p.owner_id', 'u.id')
+        .whereIn('p.id', ids)
+        .select('p.id as project_id', 'u.id', 'u.first_name', 'u.last_name', 'u.avatar_url'),
+      departmentIds.length
+        ? this.knex('users')
+          .whereIn('department_id', departmentIds)
+          .andWhere('is_active', true)
+          .select('id', 'department_id', 'first_name', 'last_name', 'avatar_url')
+        : Promise.resolve([]),
     ]);
 
     const byProject = new Map<string, Map<string, {
@@ -82,9 +93,10 @@ export class ProjectsService {
       avatar_url?: string | null;
     }>>();
 
-    for (const row of [...members, ...assignees]) {
-      if (!byProject.has(row.project_id)) byProject.set(row.project_id, new Map());
-      const people = byProject.get(row.project_id)!;
+    const add = (projectId: string, row: { id: string; first_name: string; last_name: string; avatar_url?: string | null }) => {
+      if (!projectId || !row?.id) return;
+      if (!byProject.has(projectId)) byProject.set(projectId, new Map());
+      const people = byProject.get(projectId)!;
       if (!people.has(row.id)) {
         people.set(row.id, {
           id: row.id,
@@ -92,6 +104,14 @@ export class ProjectsService {
           last_name: row.last_name,
           avatar_url: row.avatar_url,
         });
+      }
+    };
+
+    for (const row of [...members, ...assignees, ...owners]) add(row.project_id, row);
+    for (const project of projects) {
+      if (!project.department_id) continue;
+      for (const person of deptPeople) {
+        if (person.department_id === project.department_id) add(project.id, person);
       }
     }
 
