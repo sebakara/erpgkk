@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { Plus, FolderOpen } from 'lucide-react';
 import Link from 'next/link';
 import { ProjectPeople } from '@/components/projects/project-people';
+import { ProjectIconPicker } from '@/components/projects/project-icon-picker';
 import type { Project } from '@/types';
 
 export default function ProjectsPage() {
@@ -76,8 +77,9 @@ export default function ProjectsPage() {
             <div className="space-y-3">
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Project name" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description (optional)" rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none" />
-              <div className="flex gap-2">
-                <input value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })} placeholder="Icon 🚀" className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center" />
+              <ProjectIconPicker value={form.icon} onChange={(icon) => setForm({ ...form, icon })} />
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium text-gray-700">Color</label>
                 <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} className="w-10 h-10 rounded-lg border border-gray-300 cursor-pointer" />
               </div>
               {departments.length > 0 && (

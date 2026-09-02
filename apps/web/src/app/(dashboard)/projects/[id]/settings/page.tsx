@@ -7,6 +7,7 @@ import { getInitials } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth.store';
 import toast from 'react-hot-toast';
 import { Trash2, UserPlus, X } from 'lucide-react';
+import { ProjectIconPicker } from '@/components/projects/project-icon-picker';
 
 export default function ProjectSettingsPage() {
   const { id } = useParams<{ id: string }>();
@@ -101,15 +102,9 @@ export default function ProjectSettingsPage() {
           />
         </div>
 
+        <ProjectIconPicker value={f.icon ?? ''} onChange={(icon) => setForm({ ...f, icon })} />
+
         <div className="flex gap-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Icon</label>
-            <input
-              value={f.icon ?? ''}
-              onChange={(e) => setForm({ ...f, icon: e.target.value })}
-              className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center"
-            />
-          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
             <input
