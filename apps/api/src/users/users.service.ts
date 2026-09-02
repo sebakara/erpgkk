@@ -1,8 +1,10 @@
-import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
 import { MailService } from '../common/services/mail.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { ensureManagementDepartment } from '../common/access/management';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
@@ -13,6 +15,7 @@ export class UsersService {
     @Inject(KNEX_CONNECTION) private readonly knex: Knex,
     private readonly mail: MailService,
     private readonly config: ConfigService,
+    @Optional() private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
   async findById(id: string) {
@@ -74,7 +77,38 @@ export class UsersService {
     first_name: string; last_name: string; job_title: string;
     avatar_url: string; department_id: string; reports_to: string; role: string; is_active: boolean;
   }>) {
-    await this.knex('users').where({ id }).update({ ...data, updated_at: new Date() });
+    const user = await this.knex('users').where({ id }).first();
+    if (!user) throw new NotFoundException('User not found');
+
+    const nextRole = data.role ?? user.role;
+    const patch: Record<string, unknown> = { ...data, updated_at: new Date() };
+    if (nextRole === 'manager') {
+      patch.department_id = await ensureManagementDepartment(this.knex, user.company_id);
+    }
+
+    await this.knex('users').where({ id }).update(patch);
+
+    if (data.role && data.role !== user.role) {
+      await this.notificationsGateway?.notifyUser(id, {
+        type: 'role_changed',
+        title: 'Your role was updated',
+        body: `You are now a ${nextRole}`,
+        data: { href: '/profile', role: nextRole },
+      });
+    } else if (
+      patch.department_id
+      && patch.department_id !== user.department_id
+      && nextRole !== 'manager'
+    ) {
+      const dept = await this.knex('departments').where({ id: patch.department_id }).first('name');
+      await this.notificationsGateway?.notifyUser(id, {
+        type: 'department_changed',
+        title: 'Your department was updated',
+        body: dept?.name ? `You were moved to ${dept.name}` : 'Your department assignment changed',
+        data: { href: '/profile', department_id: patch.department_id },
+      });
+    }
+
     return this.findById(id);
   }
 
@@ -92,10 +126,16 @@ export class UsersService {
 
     const company = await this.knex('companies').where({ id: companyId }).first();
 
+    const role = data.role ?? 'employee';
+    let department_id = data.department_id || null;
+    if (role === 'manager') {
+      department_id = await ensureManagementDepartment(this.knex, companyId);
+    }
+
     // Look up the dept head to set as the reporting manager
     let reports_to: string | null = null;
-    if (data.department_id) {
-      const dept = await this.knex('departments').where({ id: data.department_id }).first();
+    if (department_id) {
+      const dept = await this.knex('departments').where({ id: department_id }).first();
       reports_to = dept?.manager_id ?? null;
     }
 
@@ -110,9 +150,9 @@ export class UsersService {
       password_hash,
       first_name: data.first_name,
       last_name: data.last_name,
-      role: data.role ?? 'employee',
+      role,
       job_title: data.job_title ?? null,
-      department_id: data.department_id ?? null,
+      department_id,
       reports_to,
       is_active: false,
       onboarding_completed: false,

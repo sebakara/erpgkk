@@ -1,13 +1,16 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { notificationsApi } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
+import { notificationHref } from '@/lib/notifications';
 import { Bell, CheckCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Notification } from '@/types';
 
 export default function NotificationsPage() {
   const qc = useQueryClient();
+  const router = useRouter();
   const { data: notifications = [], isLoading } = useQuery({ queryKey: ['notifications'], queryFn: notificationsApi.list });
 
   const markAll = useMutation({
@@ -23,6 +26,12 @@ export default function NotificationsPage() {
   if (isLoading) return <div className="flex items-center justify-center h-40"><div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" /></div>;
 
   const unread = (notifications as Notification[]).filter((n) => !n.is_read);
+
+  const open = (n: Notification) => {
+    if (!n.is_read) markOne.mutate(n.id);
+    const href = notificationHref(n);
+    if (href) router.push(href);
+  };
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -46,7 +55,7 @@ export default function NotificationsPage() {
       ) : (
         <div className="space-y-2">
           {(notifications as Notification[]).map((n) => (
-            <div key={n.id} onClick={() => !n.is_read && markOne.mutate(n.id)}
+            <div key={n.id} onClick={() => open(n)}
               className={`bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex gap-3 cursor-pointer hover:bg-gray-50 transition-colors ${!n.is_read ? 'border-l-4 border-l-primary-500' : ''}`}>
               <div className="w-2 h-2 mt-1.5 rounded-full shrink-0" style={{ background: n.is_read ? '#d1d5db' : '#4f46e5' }} />
               <div className="flex-1 min-w-0">

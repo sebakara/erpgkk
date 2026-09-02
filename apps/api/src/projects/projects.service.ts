@@ -4,12 +4,14 @@ import { KNEX_CONNECTION } from '../database/database.module';
 import { v4 as uuid } from 'uuid';
 import { ChatService } from '../chat/chat.service';
 import { canManageAllProjects, pickEngineeringDepartment } from '../common/access/engineering';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Injectable()
 export class ProjectsService {
   constructor(
     @Inject(KNEX_CONNECTION) private readonly knex: Knex,
     @Optional() private readonly chatService: ChatService,
+    @Optional() private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
   async findAll(companyId: string, userId: string, userRole?: string) {
@@ -146,19 +148,36 @@ export class ProjectsService {
       .first('id');
     if (!user) throw new NotFoundException('Developer not found');
 
+    const existing = await this.knex('project_members').where({ project_id: projectId, user_id: userId }).first();
     await this.knex('project_members')
       .insert({ id: uuid(), project_id: projectId, user_id: userId, role })
       .onConflict(['project_id', 'user_id'])
       .merge({ role });
+    if (!existing) {
+      await this.notificationsGateway?.notifyUser(userId, {
+        type: 'project_access_granted',
+        title: 'Added to a project',
+        body: `You now have access to ${project.name}`,
+        data: { href: `/projects/${projectId}`, project_id: projectId },
+      });
+    }
     return this.findById(projectId, project.company_id);
   }
 
   async removeMember(projectId: string, userId: string) {
-    const owner = await this.knex('projects').where({ id: projectId }).first('owner_id');
-    if (owner?.owner_id === userId) {
+    const project = await this.knex('projects').where({ id: projectId }).first('owner_id', 'name');
+    if (project?.owner_id === userId) {
       throw new ForbiddenException('The project owner cannot be removed');
     }
-    await this.knex('project_members').where({ project_id: projectId, user_id: userId }).delete();
+    const removed = await this.knex('project_members').where({ project_id: projectId, user_id: userId }).delete();
+    if (removed && project) {
+      await this.notificationsGateway?.notifyUser(userId, {
+        type: 'project_access_revoked',
+        title: 'Removed from a project',
+        body: `You no longer have access to ${project.name}`,
+        data: { href: '/projects', project_id: projectId },
+      });
+    }
   }
 
   async contributors(id: string, companyId: string) {
@@ -203,8 +222,13 @@ export class ProjectsService {
       );
   }
 
-  remove(id: string, companyId: string) {
-    return this.knex('projects').where({ id, company_id: companyId }).update({ deleted_at: new Date() });
+  async remove(id: string, companyId: string) {
+    const updated = await this.knex('projects')
+      .where({ id, company_id: companyId })
+      .whereNull('deleted_at')
+      .update({ deleted_at: new Date(), updated_at: new Date() });
+    if (!updated) throw new NotFoundException('Project not found');
+    return { deleted: true };
   }
 
   private async engineeringDepartmentId(companyId: string) {
@@ -213,6 +237,68 @@ export class ProjectsService {
       .whereNull('deleted_at')
       .select('id', 'name');
     return pickEngineeringDepartment(depts)?.id ?? null;
+  }
+
+  async workspaceStats(companyId: string, userId: string, userRole?: string) {
+    const projects = await this.accessibleProjects(companyId, userId, userRole);
+    const ids = projects.map((project) => project.id);
+    const empty = {
+      total: 0,
+      done: 0,
+      inProgress: 0,
+      byStatus: {} as Record<string, number>,
+      byPriority: {} as Record<string, number>,
+      byProject: [] as { id: string; name: string; total: number; done: number; open: number }[],
+    };
+    if (!ids.length) return empty;
+
+    const issuesQuery = this.knex('issues')
+      .whereIn('project_id', ids)
+      .whereNull('deleted_at')
+      .select('project_id', 'status', 'priority');
+    if (userRole === 'employee') issuesQuery.where('assignee_id', userId);
+    const issues = await issuesQuery;
+
+    const byStatus = issues.reduce<Record<string, number>>((acc, issue) => {
+      acc[issue.status] = (acc[issue.status] ?? 0) + 1;
+      return acc;
+    }, {});
+    const byPriority = issues.reduce<Record<string, number>>((acc, issue) => {
+      acc[issue.priority] = (acc[issue.priority] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    const counts = new Map<string, { total: number; done: number }>();
+    for (const issue of issues) {
+      const current = counts.get(issue.project_id) ?? { total: 0, done: 0 };
+      current.total += 1;
+      if (issue.status === 'done') current.done += 1;
+      counts.set(issue.project_id, current);
+    }
+
+    const byProject = projects
+      .map((project) => {
+        const stats = counts.get(project.id) ?? { total: 0, done: 0 };
+        return {
+          id: project.id,
+          name: project.name,
+          total: stats.total,
+          done: stats.done,
+          open: stats.total - stats.done,
+        };
+      })
+      .filter((row) => row.total > 0)
+      .sort((a, b) => b.open - a.open || b.total - a.total)
+      .slice(0, 8);
+
+    return {
+      total: issues.length,
+      done: issues.filter((issue) => issue.status === 'done').length,
+      inProgress: issues.filter((issue) => issue.status === 'in_progress').length,
+      byStatus,
+      byPriority,
+      byProject,
+    };
   }
 
   async analytics(id: string) {

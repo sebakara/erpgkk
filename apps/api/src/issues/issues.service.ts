@@ -2,7 +2,16 @@ import { Injectable, Inject, NotFoundException, Optional } from '@nestjs/common'
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { findMentionedUsers } from '../common/mentions';
 import { v4 as uuid } from 'uuid';
+
+const ISSUE_STATUS_LABEL: Record<string, string> = {
+  backlog: 'Backlog',
+  todo: 'To Do',
+  in_progress: 'In Progress',
+  in_review: 'In Review',
+  done: 'Done',
+};
 
 @Injectable()
 export class IssuesService {
@@ -69,31 +78,46 @@ export class IssuesService {
       await this.grantAccess(projectId, data.assignee_id);
     }
     if (data.assignee_id && data.assignee_id !== reporterId) {
-      this.notificationsGateway?.notifyUser(data.assignee_id, {
+      await this.notificationsGateway?.notifyUser(data.assignee_id, {
         type: 'issue_assigned',
         title: 'Issue assigned to you',
         body: issue.title,
+        data: { href: `/projects/${projectId}/issues`, project_id: projectId, issue_id: id },
       });
     }
     return issue;
   }
 
-  async update(id: string, data: Partial<{ title: string; description: string; type: string; status: string; priority: string; assignee_id: string; sprint_id: string; story_points: number; position: number; label: string; due_date: string }>) {
+  async update(id: string, data: Partial<{ title: string; description: string; type: string; status: string; priority: string; assignee_id: string; sprint_id: string; story_points: number; position: number; label: string; due_date: string }>, actorId?: string) {
+    const prev = await this.knex('issues').where({ id }).whereNull('deleted_at').first();
+    if (!prev) throw new NotFoundException('Issue not found');
     await this.knex('issues').where({ id }).update({ ...data, updated_at: new Date() });
     const issue = await this.findById(id);
     if (data.assignee_id) {
       await this.grantAccess(issue.project_id, data.assignee_id);
-      this.notificationsGateway?.notifyUser(data.assignee_id, {
+    }
+    if (data.assignee_id && data.assignee_id !== prev.assignee_id && data.assignee_id !== actorId) {
+      await this.notificationsGateway?.notifyUser(data.assignee_id, {
         type: 'issue_assigned',
         title: 'Issue assigned to you',
         body: issue.title,
+        data: { href: `/projects/${issue.project_id}/issues`, project_id: issue.project_id, issue_id: id },
       });
+    }
+    if (data.status && data.status !== prev.status) {
+      await this.notifyStatusChange(issue, prev.status, data.status, actorId);
     }
     return issue;
   }
 
-  async moveStatus(id: string, status: string, position: number) {
+  async moveStatus(id: string, status: string, position: number, actorId?: string) {
+    const prev = await this.knex('issues').where({ id }).whereNull('deleted_at').first();
+    if (!prev) throw new NotFoundException('Issue not found');
     await this.knex('issues').where({ id }).update({ status, position, updated_at: new Date() });
+    if (status !== prev.status) {
+      const issue = await this.findById(id);
+      await this.notifyStatusChange(issue, prev.status, status, actorId);
+    }
   }
 
   async addComment(issueId: string, authorId: string, body: string) {
@@ -104,16 +128,40 @@ export class IssuesService {
       .where('c.id', id)
       .select('c.*', this.knex.raw("CONCAT(u.first_name, ' ', u.last_name) as author_name"), 'u.avatar_url as author_avatar')
       .first();
-    const issue = await this.knex('issues').where({ id: issueId }).select('reporter_id', 'assignee_id', 'title').first();
+    const issue = await this.knex('issues').where({ id: issueId }).select('reporter_id', 'assignee_id', 'title', 'project_id').first();
+    const href = `/projects/${issue?.project_id}/issues`;
     const notified = new Set<string>([authorId]);
     for (const recipientId of [issue?.reporter_id, issue?.assignee_id]) {
       if (recipientId && !notified.has(recipientId)) {
         notified.add(recipientId);
-        this.notificationsGateway?.notifyUser(recipientId, {
+        await this.notificationsGateway?.notifyUser(recipientId, {
           type: 'comment_added',
           title: 'New comment on an issue',
           body: issue.title,
+          data: { href, project_id: issue.project_id, issue_id: issueId },
         });
+      }
+    }
+
+    if (issue?.project_id) {
+      const project = await this.knex('projects').where({ id: issue.project_id }).select('company_id').first();
+      if (project?.company_id) {
+        const users = await this.knex('users')
+          .where({ company_id: project.company_id, is_active: true })
+          .select('id', 'first_name', 'last_name');
+        const mentioned = findMentionedUsers(body, users, authorId);
+        const author = await this.knex('users').where({ id: authorId }).select('first_name', 'last_name').first();
+        const authorName = author ? `${author.first_name} ${author.last_name}` : 'Someone';
+        for (const user of mentioned) {
+          if (notified.has(user.id)) continue;
+          notified.add(user.id);
+          await this.notificationsGateway?.notifyUser(user.id, {
+            type: 'comment_mention',
+            title: `${authorName} mentioned you`,
+            body: issue.title,
+            data: { href, project_id: issue.project_id, issue_id: issueId },
+          });
+        }
       }
     }
     return comment;
@@ -142,10 +190,11 @@ export class IssuesService {
         await this.grantAccess(projectId, item.assignee_id);
       }
       if (item.assignee_id && item.assignee_id !== reporterId) {
-        this.notificationsGateway?.notifyUser(item.assignee_id, {
+        await this.notificationsGateway?.notifyUser(item.assignee_id, {
           type: 'issue_assigned',
           title: 'Issue assigned to you',
           body: item.title,
+          data: { href: `/projects/${projectId}/issues`, project_id: projectId, issue_id: id },
         });
       }
     }
@@ -154,6 +203,20 @@ export class IssuesService {
 
   remove(id: string) {
     return this.knex('issues').where({ id }).update({ deleted_at: new Date() });
+  }
+
+  private async notifyStatusChange(issue: any, from: string, to: string, actorId?: string) {
+    const label = ISSUE_STATUS_LABEL[to] ?? to;
+    await this.notificationsGateway?.notifyUsers(
+      [issue.assignee_id, issue.reporter_id],
+      {
+        type: 'issue_status_changed',
+        title: `Issue moved to ${label}`,
+        body: issue.title,
+        data: { href: `/projects/${issue.project_id}/board`, project_id: issue.project_id, issue_id: issue.id, status: to, from },
+      },
+      actorId,
+    );
   }
 
   private async grantAccess(projectId: string, userId?: string) {

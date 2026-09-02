@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
 import { SprintsService } from './sprints.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('projects/:projectId/sprints')
 @UseGuards(JwtAuthGuard)
@@ -28,8 +29,8 @@ export class SprintsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.sprintsService.update(id, body);
+  update(@Param('id') id: string, @CurrentUser() user: any, @Body() body: any) {
+    return this.sprintsService.update(id, body, user.id);
   }
 
   @Delete(':id')

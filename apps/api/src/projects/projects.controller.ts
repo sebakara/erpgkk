@@ -16,6 +16,11 @@ export class ProjectsController {
     return this.projectsService.findAll(user.company_id, user.id, user.role);
   }
 
+  @Get('workspace-stats')
+  workspaceStats(@CurrentUser() user: any) {
+    return this.projectsService.workspaceStats(user.company_id, user.id, user.role);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.projectsService.findById(id, user.company_id);
@@ -56,7 +61,7 @@ export class ProjectsController {
   }
 
   @Delete(':id')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager)
   remove(@Param('id') id: string, @CurrentUser() user: any) {
     return this.projectsService.remove(id, user.company_id);
   }

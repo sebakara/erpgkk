@@ -35,6 +35,22 @@ const SRC_DEPARTMENTS = [
   { src_id: 35, name: 'Management' },
 ];
 
+function managementDeptId(deptIdMap) {
+  return deptIdMap.get(35) || deptIdMap.get(22) || null;
+}
+
+function homeDeptId(person, deptIdMap) {
+  if (person.role === 'manager') {
+    return managementDeptId(deptIdMap) || (person.dept_src_id ? deptIdMap.get(person.dept_src_id) : null) || null;
+  }
+  return person.dept_src_id ? deptIdMap.get(person.dept_src_id) || null : null;
+}
+
+function homeDeptName(person) {
+  if (person.role === 'manager') return 'Management';
+  return SRC_DEPARTMENTS.find((dept) => dept.src_id === person.dept_src_id)?.name || 'none';
+}
+
 // src_id is employees_employees.id. reports_to_src_id is parent employee id.
 const SRC_USERS = [
   {
@@ -367,7 +383,7 @@ async function importEmployees(db) {
   const userIdMap = new Map();
   for (const person of SRC_USERS) {
     const existing = await db('users').where({ email: person.email.toLowerCase() }).first();
-    const deptName = SRC_DEPARTMENTS.find((dept) => dept.src_id === person.dept_src_id)?.name || 'none';
+    const deptName = homeDeptName(person);
     const managerName = person.reports_to_src_id
       ? SRC_USERS.find((other) => other.src_id === person.reports_to_src_id)
       : null;
@@ -375,7 +391,7 @@ async function importEmployees(db) {
 
     if (existing) {
       userIdMap.set(person.src_id, existing.id);
-      const deptId = person.dept_src_id ? deptIdMap.get(person.dept_src_id) || null : null;
+      const deptId = homeDeptId(person, deptIdMap);
       const moved = existing.company_id !== company.id;
       if (moved) summary.users.move += 1;
       else summary.users.exist += 1;
@@ -394,6 +410,12 @@ async function importEmployees(db) {
           phone: person.phone || existing.phone,
           nid: person.nid || existing.nid,
           address: person.address || existing.address,
+          bank_name: person.bank_name || existing.bank_name,
+          bank_account_name: person.bank_account_name || existing.bank_account_name,
+          bank_account_number: person.bank_account_number || existing.bank_account_number,
+          emergency_contact_name: person.emergency_contact_name || existing.emergency_contact_name,
+          emergency_contact_phone: person.emergency_contact_phone || existing.emergency_contact_phone,
+          emergency_contact_relation: person.emergency_contact_relation || existing.emergency_contact_relation,
           is_active: true,
           updated_at: new Date(),
         });
@@ -414,7 +436,7 @@ async function importEmployees(db) {
       await db('users').insert(userRow(
         id,
         company.id,
-        person.dept_src_id ? deptIdMap.get(person.dept_src_id) || null : null,
+        homeDeptId(person, deptIdMap),
         null,
         passwordHash,
         person,
@@ -449,6 +471,27 @@ async function importEmployees(db) {
     if (APPLY) {
       await db('departments').where({ id: deptId }).update({ manager_id: managerId, updated_at: new Date() });
     }
+  }
+
+  console.log('\n── Manager home department');
+  const mgmtId = managementDeptId(deptIdMap);
+  if (mgmtId) {
+    const managers = await db('users')
+      .where({ company_id: company.id, role: 'manager' })
+      .select('id', 'first_name', 'last_name', 'email', 'department_id');
+    for (const mgr of managers) {
+      if (mgr.department_id === mgmtId) {
+        log('KEEP', `${mgr.first_name} ${mgr.last_name} already in Management/Administration`);
+        continue;
+      }
+      log('SET', `${mgr.first_name} ${mgr.last_name} → Management/Administration`);
+      if (APPLY) {
+        await db('users').where({ id: mgr.id }).update({ department_id: mgmtId, updated_at: new Date() });
+      }
+    }
+    if (managers.length === 0) log('KEEP', 'no manager-role users');
+  } else {
+    log('SKIP', 'Management/Administration department missing');
   }
 
   const rndId = deptIdMap.get(29);

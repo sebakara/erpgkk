@@ -1,15 +1,16 @@
 'use client';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { projectsApi, usersApi } from '@/lib/api';
 import { getInitials } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth.store';
 import toast from 'react-hot-toast';
-import { UserPlus, X } from 'lucide-react';
+import { Trash2, UserPlus, X } from 'lucide-react';
 
 export default function ProjectSettingsPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const canManage = user?.role === 'admin' || user?.role === 'manager';
@@ -56,6 +57,16 @@ export default function ProjectSettingsPage() {
       toast.success('Developer removed from project');
     },
     onError: () => toast.error('Failed to remove developer'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => projectsApi.remove(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      toast.success('Project deleted');
+      router.push('/projects');
+    },
+    onError: () => toast.error('Failed to delete project'),
   });
 
   if (isLoading) return <div className="flex items-center justify-center h-40"><div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" /></div>;
@@ -193,6 +204,28 @@ export default function ProjectSettingsPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {canManage && (
+        <div className="bg-white rounded-xl border border-red-100 p-6 shadow-sm space-y-3 min-w-0 lg:col-span-2">
+          <h2 className="font-semibold text-gray-900">Delete project</h2>
+          <p className="text-sm text-gray-500">
+            Soft-delete this project. It disappears from lists and boards, but issues, docs, and files stay in the database.
+          </p>
+          <button
+            type="button"
+            disabled={deleteMutation.isPending}
+            onClick={() => {
+              if (confirm(`Delete "${project.name}"? It will be hidden, not permanently erased.`)) {
+                deleteMutation.mutate();
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-700 text-sm font-medium rounded-lg hover:bg-red-100 disabled:opacity-50"
+          >
+            <Trash2 size={14} />
+            {deleteMutation.isPending ? 'Deleting…' : 'Delete project'}
+          </button>
         </div>
       )}
     </div>

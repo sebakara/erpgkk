@@ -20,9 +20,10 @@ import {
   chatApi,
   projectsApi,
 } from '@/lib/api';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate, cn, getInitials } from '@/lib/utils';
+import { pickManagementDepartment } from '@/lib/access';
 import { desktopNotify } from '@/lib/desktop-notify';
 import toast from 'react-hot-toast';
 import type {
@@ -47,9 +48,19 @@ const LEAVE_TYPES = ['annual', 'sick', 'emergency', 'unpaid', 'maternity', 'pate
 
 export default function HrPage() {
   const user = useAuthStore((s) => s.user);
+  const searchParams = useSearchParams();
   const isManager = user?.role !== 'employee';
   const canUseStandupNotes = user?.role === 'admin' || user?.role === 'manager';
-  const [tab, setTab] = useState<Tab>('overview');
+  const initialTab = searchParams.get('tab');
+  const [tab, setTab] = useState<Tab>(() => {
+    if (initialTab === 'standup-notes' && (user?.role === 'admin' || user?.role === 'manager')) {
+      return 'standup-notes';
+    }
+    if (initialTab === 'employees' || initialTab === 'leave-packages' || initialTab === 'performance' || initialTab === 'reports' || initialTab === 'overview') {
+      return initialTab;
+    }
+    return 'overview';
+  });
 
   const allTabs: {
     key: Tab;
@@ -728,6 +739,7 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
 
   const { data: employees = [], isLoading } = useQuery({ queryKey: ['employees'], queryFn: usersApi.list });
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: departmentsApi.list });
+  const managementDept = pickManagementDepartment(departments as { id: string; name: string }[]);
 
   const createMutation = useMutation({
     mutationFn: () => usersApi.create(addForm),
@@ -884,7 +896,14 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
-                  <select value={addForm.role} onChange={(e) => setAddForm({ ...addForm, role: e.target.value })}
+                  <select value={addForm.role} onChange={(e) => {
+                    const role = e.target.value;
+                    setAddForm({
+                      ...addForm,
+                      role,
+                      department_id: role === 'manager' ? (managementDept?.id ?? '') : addForm.department_id,
+                    });
+                  }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none">
                     <option value="employee">Employee</option>
                     <option value="manager">Manager</option>
@@ -894,14 +913,23 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Department</label>
-                  <select value={addForm.department_id} onChange={(e) => setAddForm({ ...addForm, department_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none">
+                  <select
+                    value={addForm.role === 'manager' ? (managementDept?.id ?? addForm.department_id) : addForm.department_id}
+                    onChange={(e) => setAddForm({ ...addForm, department_id: e.target.value })}
+                    disabled={addForm.role === 'manager'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none disabled:bg-gray-50 disabled:text-gray-500"
+                  >
                     <option value="">No department</option>
                     {(departments as any[]).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
               </div>
-              {addForm.department_id && (() => {
+              {addForm.role === 'manager' && (
+                <p className="text-xs text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2 border border-indigo-100">
+                  Managers belong to {managementDept?.name ?? 'Administration/Management'}. They can still head another department from Settings.
+                </p>
+              )}
+              {addForm.department_id && addForm.role !== 'manager' && (() => {
                 const dept = (departments as any[]).find((d) => d.id === addForm.department_id);
                 const head = dept?.manager_name ?? dept?.manager_id;
                 return head ? (

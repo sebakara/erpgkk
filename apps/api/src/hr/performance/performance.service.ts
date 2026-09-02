@@ -79,12 +79,12 @@ export class PerformanceService {
     const reviewer = await this.knex('users').where({ id: reviewerId }).select('first_name', 'last_name').first();
     const reviewee = await this.knex('users').where({ id: data.reviewee_id }).select('first_name', 'last_name').first();
     if (reviewer && reviewee) {
-      await this.deptNotifier.notifyHead(data.reviewee_id, {
-        type: 'performance_review_created',
-        title: 'Performance review created',
-        body: `${reviewer.first_name} ${reviewer.last_name} created a review for ${reviewee.first_name} ${reviewee.last_name} — ${data.period}`,
-        data: { review_id: id },
-      });
+        await this.deptNotifier.notifyHead(data.reviewee_id, {
+          type: 'performance_review_created',
+          title: 'Performance review created',
+          body: `${reviewer.first_name} ${reviewer.last_name} created a review for ${reviewee.first_name} ${reviewee.last_name} — ${data.period}`,
+          data: { href: '/hr?tab=performance', review_id: id },
+        });
     }
 
     return this.findById(id);
@@ -115,9 +115,27 @@ export class PerformanceService {
           type: 'performance_review_submitted',
           title: 'Performance review submitted',
           body: `${reviewer.first_name} ${reviewer.last_name} submitted a review for ${reviewee.first_name} ${reviewee.last_name}`,
-          data: { review_id: id },
+          data: { href: '/hr?tab=performance', review_id: id },
         });
+        if (review.reviewee_id !== userId) {
+          await this.deptNotifier.notifyUser(review.reviewee_id, {
+            type: 'performance_review_submitted',
+            title: 'You have a new performance review',
+            body: `${reviewer.first_name} ${reviewer.last_name} submitted your ${review.period} review`,
+            data: { href: '/hr?tab=performance', review_id: id },
+          });
+        }
       }
+    }
+
+    if (data.status === 'acknowledged' && review.status !== 'acknowledged' && review.reviewer_id !== userId) {
+      const reviewee = await this.knex('users').where({ id: review.reviewee_id }).select('first_name', 'last_name').first();
+      await this.deptNotifier.notifyUser(review.reviewer_id, {
+        type: 'performance_review_submitted',
+        title: 'Review acknowledged',
+        body: `${reviewee ? `${reviewee.first_name} ${reviewee.last_name}` : 'The employee'} acknowledged your review`,
+        data: { href: '/hr?tab=performance', review_id: id },
+      });
     }
 
     return this.findById(id);

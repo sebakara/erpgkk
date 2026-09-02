@@ -1,11 +1,15 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Optional } from '@nestjs/common';
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { v4 as uuid } from 'uuid';
 
 @Injectable()
 export class DepartmentsService {
-  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
+  constructor(
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
+    @Optional() private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   findAll(companyId: string) {
     return this.knex('departments as d')
@@ -25,12 +29,29 @@ export class DepartmentsService {
   async create(companyId: string, data: { name: string; manager_id?: string }) {
     const id = uuid();
     await this.knex('departments').insert({ id, company_id: companyId, ...data });
+    if (data.manager_id) {
+      await this.notifyHeadAssigned(id, data.name, data.manager_id);
+    }
     return this.findById(id, companyId);
   }
 
   async update(id: string, data: Partial<{ name: string; manager_id: string }>) {
+    const prev = await this.knex('departments').where({ id }).first();
     await this.knex('departments').where({ id }).update({ ...data, updated_at: new Date() });
-    return this.knex('departments').where({ id }).first();
+    const dept = await this.knex('departments').where({ id }).first();
+    if (data.manager_id && data.manager_id !== prev?.manager_id) {
+      await this.notifyHeadAssigned(id, dept?.name ?? prev?.name, data.manager_id);
+    }
+    return dept;
+  }
+
+  private async notifyHeadAssigned(departmentId: string, name: string, managerId: string) {
+    await this.notificationsGateway?.notifyUser(managerId, {
+      type: 'department_head_assigned',
+      title: 'You now head a department',
+      body: `You were assigned as head of ${name}`,
+      data: { href: '/hr?tab=employees', department_id: departmentId },
+    });
   }
 
   remove(id: string, companyId: string) {

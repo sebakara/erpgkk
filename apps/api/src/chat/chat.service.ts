@@ -6,6 +6,7 @@ import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { LeaveService } from '../hr/leave/leave.service';
 import { IssuesService } from '../issues/issues.service';
 import { canManageAllProjects, engineeringHeadIds } from '../common/access/engineering';
+import { findMentionedUsers } from '../common/mentions';
 
 const LEAVE_TYPES = ['annual', 'sick', 'emergency', 'unpaid', 'maternity', 'paternity'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -224,25 +225,14 @@ export class ChatService {
 
   private async notifyMentions(content: string, sender: any, convId: string) {
     const users = await this.getUsers(sender.company_id);
-    const mentioned = (users as any[]).filter((u) => {
-      if (u.id === sender.id) return false;
-      const needles = [
-        `@${u.first_name}`,
-        `@${u.first_name}${u.last_name}`,
-        `@${u.first_name}.${u.last_name}`,
-        `@${u.first_name}_${u.last_name}`,
-      ].map((n) => n.toLowerCase());
-      const lower = content.toLowerCase();
-      return needles.some((n) => new RegExp(`(^|[\\s])${this.escapeRe(n)}\\b`).test(lower));
-    });
-
+    const mentioned = findMentionedUsers(content, users as any[], sender.id);
     const preview = content.length > 80 ? `${content.slice(0, 77)}…` : content;
     for (const u of mentioned) {
       await this.gateway?.notifyUser(u.id, {
         type: 'chat_mention',
         title: `${sender.first_name} ${sender.last_name} mentioned you`,
         body: preview,
-        data: { convId },
+        data: { href: `/chat?conv=${convId}`, convId },
       });
     }
   }
@@ -411,9 +401,5 @@ export class ChatService {
       .count('m.id as c')
       .first();
     return { last_message: lastMsg, unread_count: Number((unread as any)?.c ?? 0) };
-  }
-
-  private escapeRe(s: string) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 }

@@ -66,7 +66,7 @@ export class LeaveService {
       type: 'leave_requested',
       title: 'New leave request',
       body: `${name} requested ${days} day${days !== 1 ? 's' : ''} of ${data.type} leave`,
-      data: { leave_request_id: id },
+      data: { href: '/hr?tab=overview', leave_request_id: id },
     };
 
     await this.deptNotifier.notifyHead(userId, payload);
@@ -85,6 +85,7 @@ export class LeaveService {
       type: 'leave_approved',
       title: 'Leave request approved ✓',
       body: `Your ${req.type} leave request has been approved`,
+      data: { href: '/hr?tab=overview', leave_request_id: id },
     });
     return req;
   }
@@ -99,6 +100,7 @@ export class LeaveService {
       type: 'leave_rejected',
       title: 'Leave request rejected',
       body: note || `Your ${req.type} leave request was not approved`,
+      data: { href: '/hr?tab=overview', leave_request_id: id },
     });
     return req;
   }

@@ -113,13 +113,13 @@ export class LeavePackagesService {
           type: 'leave_package_allocated',
           title: 'Leave package assigned',
           body: `You have been assigned the "${pkg.name}" leave package`,
-          data: { package_id: packageId },
+          data: { href: '/hr?tab=overview', package_id: packageId },
         });
         await this.deptNotifier.notifyHead(userId, {
           type: 'leave_package_allocated',
           title: 'Leave package assigned to team member',
           body: `A team member was assigned the "${pkg.name}" leave package`,
-          data: { package_id: packageId },
+          data: { href: '/hr?tab=overview', package_id: packageId },
         });
       }
     }

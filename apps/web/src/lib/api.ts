@@ -54,6 +54,8 @@ export const projectsApi = {
   removeMember: (id: string, userId: string) => api.delete(`/projects/${id}/members/${userId}`).then((r) => r.data),
   contributors: (id: string) => api.get(`/projects/${id}/contributors`).then((r) => r.data),
   analytics: (id: string) => api.get(`/projects/${id}/analytics`).then((r) => r.data),
+  workspaceStats: () => api.get('/projects/workspace-stats').then((r) => r.data),
+  remove: (id: string) => api.delete(`/projects/${id}`).then((r) => r.data),
 };
 
 // Sprints

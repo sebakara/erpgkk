@@ -42,16 +42,18 @@ export async function seed(knex: Knex): Promise<void> {
   /* ══════════════════════════════════════════════════
      DEPARTMENTS (IDs kept so we can set heads later)
   ══════════════════════════════════════════════════ */
-  const deptEngId    = uuid();
+  const deptEngId     = uuid();
   const deptProductId = uuid();
-  const deptHrId     = uuid();
-  const deptOpsId    = uuid();
+  const deptHrId      = uuid();
+  const deptOpsId     = uuid();
+  const deptMgmtId    = uuid();
 
   await knex('departments').insert([
     { id: deptEngId,     company_id: companyId, name: 'Engineering'      },
     { id: deptProductId, company_id: companyId, name: 'Product'          },
     { id: deptHrId,      company_id: companyId, name: 'Human Resources'  },
     { id: deptOpsId,     company_id: companyId, name: 'Operations'       },
+    { id: deptMgmtId,    company_id: companyId, name: 'Management'       },
   ]);
 
   /* ══════════════════════════════════════════════════
@@ -92,7 +94,7 @@ export async function seed(knex: Knex): Promise<void> {
     {
       id: hrMgrId,
       company_id: companyId,
-      department_id: deptHrId,
+      department_id: deptMgmtId,
       email: 'hr@gkk.com',
       password_hash: pw,
       first_name: 'Priya',
@@ -104,7 +106,7 @@ export async function seed(knex: Knex): Promise<void> {
     {
       id: productMgrId,
       company_id: companyId,
-      department_id: deptProductId,
+      department_id: deptMgmtId,
       email: 'product@gkk.com',
       password_hash: pw,
       first_name: 'Sam',
@@ -153,6 +155,7 @@ export async function seed(knex: Knex): Promise<void> {
   await knex('departments').where({ id: deptOpsId     }).update({ manager_id: ceoId       });
   await knex('departments').where({ id: deptHrId      }).update({ manager_id: hrMgrId     });
   await knex('departments').where({ id: deptProductId }).update({ manager_id: productMgrId });
+  await knex('departments').where({ id: deptMgmtId    }).update({ manager_id: ceoId       });
 
   const allDevIds = developers.map((d) => d.id);
   const allMemberIds = [adminId, productMgrId, ...allDevIds];

@@ -1,11 +1,15 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, Optional } from '@nestjs/common';
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { v4 as uuid } from 'uuid';
 
 @Injectable()
 export class FilesService {
-  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
+  constructor(
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
+    @Optional() private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   async findByProject(projectId: string) {
     return this.knex('project_files as f')
@@ -35,7 +39,21 @@ export class FilesService {
       created_at: new Date(),
       updated_at: new Date(),
     });
-    return this.knex('project_files').where('id', id).first();
+    const fileRow = await this.knex('project_files').where('id', id).first();
+    const project = await this.knex('projects').where({ id: projectId }).first('name');
+    const uploader = await this.knex('users').where({ id: uploadedBy }).select('first_name', 'last_name').first();
+    const memberIds = await this.knex('project_members').where({ project_id: projectId }).pluck('user_id');
+    await this.notificationsGateway?.notifyUsers(
+      memberIds,
+      {
+        type: 'file_uploaded',
+        title: 'New file in project',
+        body: `${uploader ? `${uploader.first_name} ${uploader.last_name}` : 'Someone'} uploaded ${file.originalname}${project?.name ? ` to ${project.name}` : ''}`,
+        data: { href: `/projects/${projectId}/folder`, project_id: projectId, file_id: id },
+      },
+      uploadedBy,
+    );
+    return fileRow;
   }
 
   async remove(fileId: string, projectId: string) {

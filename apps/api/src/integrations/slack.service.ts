@@ -4,7 +4,6 @@ import { Knex } from 'knex';
 import * as crypto from 'crypto';
 import { KNEX_CONNECTION } from '../database/database.module';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
-import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class SlackService {
@@ -14,7 +13,6 @@ export class SlackService {
     private readonly config: ConfigService,
     @Inject(KNEX_CONNECTION) private readonly knex: Knex,
     private readonly notificationsGateway: NotificationsGateway,
-    private readonly notificationsService: NotificationsService,
   ) {}
 
   // Verify the request actually came from Slack using HMAC-SHA256
@@ -51,7 +49,7 @@ export class SlackService {
       type: 'slack_joined',
       title: 'You joined the Slack workspace',
       body: 'Your GKK ERP account is now linked. Welcome aboard!',
-      data: { slack_user_id: slackUser.id },
+      data: { href: '/dashboard', slack_user_id: slackUser.id },
     });
 
     // Notify all admins and managers
@@ -62,11 +60,11 @@ export class SlackService {
 
     for (const admin of admins) {
       if (admin.id === user.id) continue;
-      await this.notificationsService.create(admin.id, {
+      await this.notificationsGateway.notifyUser(admin.id, {
         type: 'slack_employee_joined',
         title: 'New employee joined Slack',
         body: `${fullName} (${email}) has joined the Slack workspace`,
-        data: { user_id: user.id, slack_user_id: slackUser.id },
+        data: { href: '/hr?tab=employees', user_id: user.id, slack_user_id: slackUser.id },
       });
     }
 

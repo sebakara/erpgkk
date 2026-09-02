@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Building2, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import { companyApi, departmentsApi, usersApi } from '@/lib/api';
+import { pickManagementDepartment } from '@/lib/access';
 import { useAuthStore } from '@/store/auth.store';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -330,11 +331,15 @@ function MembersSection() {
               <p className="text-sm font-medium text-gray-900 truncate">{emp.first_name} {emp.last_name}</p>
               <p className="text-xs text-gray-400 truncate">{emp.email}</p>
             </div>
-            {/* Department select */}
+            {/* Department select — managers are locked to Administration/Management */}
             <select
-              value={emp.department_id ?? ''}
+              value={emp.role === 'manager'
+                ? (pickManagementDepartment(departments)?.id ?? emp.department_id ?? '')
+                : (emp.department_id ?? '')}
               onChange={(e) => updateMutation.mutate({ id: emp.id, data: { department_id: e.target.value || null } })}
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 max-w-[140px]"
+              disabled={emp.role === 'manager'}
+              title={emp.role === 'manager' ? 'Managers belong to Administration/Management' : undefined}
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 max-w-[140px] disabled:bg-gray-50 disabled:text-gray-500"
             >
               <option value="">No dept.</option>
               {(departments as Department[]).map((d) => (

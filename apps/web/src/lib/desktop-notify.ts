@@ -3,7 +3,7 @@ export function requestDesktopPermission() {
   if (Notification.permission === 'default') Notification.requestPermission();
 }
 
-export function desktopNotify(title: string, body?: string, type?: string) {
+export function desktopNotify(title: string, body?: string, type?: string, href?: string | null) {
   if (typeof window === 'undefined' || !('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
 
@@ -14,5 +14,9 @@ export function desktopNotify(title: string, body?: string, type?: string) {
     silent: false,
   });
 
-  notif.onclick = () => { window.focus(); notif.close(); };
+  notif.onclick = () => {
+    window.focus();
+    if (href) window.location.href = href;
+    notif.close();
+  };
 }
