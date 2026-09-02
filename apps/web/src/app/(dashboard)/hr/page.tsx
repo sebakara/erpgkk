@@ -18,6 +18,7 @@ import {
   performanceApi,
   leavePackagesApi,
   chatApi,
+  projectsApi,
 } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
@@ -410,14 +411,23 @@ function StandupNotesTab() {
     queryKey: ['employees'],
     queryFn: usersApi.list,
   });
-  const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
-    queryKey: ['standup-note-projects'],
-    queryFn: hrApi.standupNotes.projects,
+  const {
+    data: projects = [],
+    isLoading: projectsLoading,
+    isError: projectsError,
+  } = useQuery<Project[]>({
+    queryKey: ['projects'],
+    queryFn: projectsApi.list,
   });
-  const { data: notes = [], isLoading: notesLoading } = useQuery<StandupNote[]>({
+  const {
+    data: notes = [],
+    isLoading: notesLoading,
+    isError: notesError,
+  } = useQuery<StandupNote[]>({
     queryKey: ['standup-notes', date],
     queryFn: () => hrApi.standupNotes.list(date),
     enabled: Boolean(date),
+    retry: (failureCount, error: any) => error?.response?.status !== 404 && failureCount < 2,
   });
 
   const developers = employees.filter(
@@ -500,6 +510,13 @@ function StandupNotesTab() {
 
   return (
     <div className="space-y-4">
+      {(notesError || projectsError) && (
+        <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {projectsError
+            ? 'Projects could not be loaded for standup notes.'
+            : 'Standup notes could not be loaded. You can still select a project, but saving may fail until the API is updated.'}
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold text-gray-900">Private standup notes</h2>
