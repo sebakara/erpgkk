@@ -106,15 +106,26 @@ jobs:
 
             pm2 delete gkkerp-api gkkerp-web || true
 
-            # Orphan node processes keep :PORT after pm2 delete, so the new
-            # API cannot listen and curl still hits the stale Nest app.
-            if command -v fuser >/dev/null 2>&1; then
-              fuser -k "${port}/tcp" || true
-            fi
-            for pid in $(ss -lptn "sport = :${port}" 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u); do
-              kill -9 "$pid" || true
-            done
+            echo "Listeners on :${port} before kill"
+            ss -lptn "sport = :${port}" || true
+            pgrep -af 'apps/api/dist/main.js' || true
+
+            # A leftover process (often root, from before the non-root PM2
+            # switch) keeps :PORT. maic cannot see its pid in ss, so sudo.
+            sudo -n fuser -vk "${port}/tcp" || true
+            fuser -vk "${port}/tcp" || true
+            sudo -n pkill -9 -f '/var/www/erpgkk/apps/api/dist/main.js' || true
+            pkill -9 -f '/var/www/erpgkk/apps/api/dist/main.js' || true
             sleep 2
+
+            echo "Listeners on :${port} after kill"
+            ss -lptn "sport = :${port}" || true
+            if ss -lptn "sport = :${port}" | grep -q LISTEN; then
+              echo "ERROR: :${port} is still in use. Need passwordless sudo to kill the leftover API process:"
+              echo "  sudo fuser -k ${port}/tcp"
+              sudo -n ss -lptn "sport = :${port}" || true
+              exit 1
+            fi
 
             pm2 start ecosystem.config.js --update-env
             pm2 save
