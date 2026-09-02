@@ -101,24 +101,41 @@ jobs:
             test -f apps/api/dist/hr/standup-notes/standup-notes.controller.js
             test -f apps/api/dist/main.js
 
-            # Delete + start so PM2 cannot keep an old process whose
-            # in-memory code predates standup-notes.
+            port=$(awk -F= '/^PORT=/{gsub(/"/, "", $2); print $2; exit}' apps/api/.env)
+            port=${port:-3001}
+
             pm2 delete gkkerp-api gkkerp-web || true
+
+            # Orphan node processes keep :PORT after pm2 delete, so the new
+            # API cannot listen and curl still hits the stale Nest app.
+            if command -v fuser >/dev/null 2>&1; then
+              fuser -k "${port}/tcp" || true
+            fi
+            for pid in $(ss -lptn "sport = :${port}" 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u); do
+              kill -9 "$pid" || true
+            done
+            sleep 2
+
             pm2 start ecosystem.config.js --update-env
             pm2 save
 
-            sleep 5
-            port=$(awk -F= '/^PORT=/{gsub(/"/, "", $2); print $2; exit}' apps/api/.env)
-            port=${port:-3001}
-            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/api/hr/standup-notes" || true)
-            echo "API :${port} /api/hr/standup-notes -> ${code}"
-            if [ "$code" != "401" ]; then
-              echo "ERROR: standup-notes route is missing after deploy"
-              pm2 describe gkkerp-api || true
-              pm2 logs gkkerp-api --lines 50 --nostream || true
-              exit 1
-            fi
+            code=""
+            i=0
+            while [ "$i" -lt 20 ]; do
+              i=$((i + 1))
+              sleep 2
+              code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/api/hr/standup-notes" || true)
+              echo "attempt ${i} API :${port} /api/hr/standup-notes -> ${code}"
+              if [ "$code" = "401" ]; then
+                echo "Deploy complete"
+                exit 0
+              fi
+            done
 
-            echo "Deploy complete"
+            echo "ERROR: standup-notes route is missing after deploy"
+            ss -lptn "sport = :${port}" || true
+            pm2 describe gkkerp-api || true
+            pm2 logs gkkerp-api --lines 80 --nostream || true
+            exit 1
           REMOTE
 
