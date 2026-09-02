@@ -154,8 +154,11 @@ function ProjectLoadChart({ rows }: { rows: WorkspaceStats['byProject'] }) {
             <YAxis type="category" dataKey="label" width={108} tick={{ fontSize: 11, fill: '#6b7280' }} />
             <Tooltip
               contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
-              formatter={(value: number, name: string) => [value, name === 'open' ? 'Open' : 'Done']}
-              labelFormatter={(_label, payload) => payload?.[0]?.payload?.name ?? ''}
+              formatter={(value, name) => [Number(value ?? 0), name === 'open' ? 'Open' : 'Done'] as [number, string]}
+              labelFormatter={(_label, payload) => {
+                const row = payload?.[0]?.payload as { name?: string } | undefined;
+                return row?.name ?? '';
+              }}
             />
             <Bar dataKey="open" stackId="a" fill="#6366f1" name="open" radius={[0, 0, 0, 0]} />
             <Bar dataKey="done" stackId="a" fill="#c7d2fe" name="done" radius={[0, 4, 4, 0]} />
