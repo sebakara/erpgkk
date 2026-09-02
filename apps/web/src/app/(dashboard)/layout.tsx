@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
+import { authApi } from '@/lib/api';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { NotificationListener } from '@/components/layout/notification-listener';
@@ -50,10 +51,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const hasHydrated = useAuthStore((s) => s._hasHydrated);
+  const updateUser = useAuthStore((s) => s.updateUser);
 
   useEffect(() => {
     if (hasHydrated && !user) router.replace('/login');
   }, [hasHydrated, user, router]);
+
+  useEffect(() => {
+    if (!hasHydrated || !user) return;
+    let cancelled = false;
+    authApi.me().then((me) => {
+      if (!cancelled && me) updateUser(me);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [hasHydrated, user?.id, updateUser]);
 
   if (!hasHydrated || !user) {
     return (

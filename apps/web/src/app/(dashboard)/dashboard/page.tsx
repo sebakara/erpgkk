@@ -1,22 +1,25 @@
 'use client';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectsApi, hrApi, issuesApi, leavePackagesApi, usersApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate, cn } from '@/lib/utils';
 import {
-  FolderOpen, Users, Calendar, CheckCircle2, Clock, Circle, Lock, ArrowRight, Megaphone, Settings,
+  FolderOpen, Users, Calendar, CheckCircle2, Clock, Circle, Lock, ArrowRight, Megaphone, Settings, Package,
 } from 'lucide-react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import {
   Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import type { Issue, LeaveBalance, LeaveRequest, Project, User } from '@/types';
+import type { Issue, LeaveBalance, LeavePackage, LeaveRequest, Project, User } from '@/types';
 import { ProjectPeople } from '@/components/projects/project-people';
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   if (user?.role === 'employee') return <EmployeeDashboard user={user} />;
   if (user?.role === 'admin') return <CeoDashboard user={user} />;
+  if (user?.role === 'hr') return <HrDashboard user={user} />;
   return <ManagerDashboard user={user} />;
 }
 
@@ -317,6 +320,202 @@ function CeoDashboard({ user }: { user: any }) {
                       {req.type} · {formatDate(req.start_date)} – {formatDate(req.end_date)}
                     </p>
                   </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HrDashboard({ user }: { user: any }) {
+  const qc = useQueryClient();
+  const [announcementForm, setAnnouncementForm] = useState({ title: '', body: '', is_pinned: false });
+  const { data: announcements = [] } = useQuery({ queryKey: ['announcements'], queryFn: hrApi.announcements.list });
+  const { data: leaveSummary = [] } = useQuery({ queryKey: ['leave-summary'], queryFn: hrApi.leave.summary });
+  const { data: leaveRequests = [] } = useQuery<LeaveRequest[]>({
+    queryKey: ['leaves', 'all'],
+    queryFn: () => hrApi.leave.list(),
+  });
+  const { data: people = [] } = useQuery<User[]>({ queryKey: ['employees'], queryFn: usersApi.list });
+  const { data: packages = [] } = useQuery<LeavePackage[]>({
+    queryKey: ['leave-packages'],
+    queryFn: leavePackagesApi.list,
+  });
+  const createAnnouncement = useMutation({
+    mutationFn: () => hrApi.announcements.create(announcementForm),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['announcements'] });
+      setAnnouncementForm({ title: '', body: '', is_pinned: false });
+      toast.success('Announcement posted');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to post announcement'),
+  });
+
+  const activePeople = people.filter((p) => Boolean(p.is_active));
+  const pendingLeave = Number(leaveSummary.find((s: any) => s.status === 'pending')?.count ?? 0);
+  const pendingRequests = leaveRequests.filter((l) => l.status === 'pending');
+  const allocatedIds = new Set(packages.flatMap((pkg) => pkg.allocated_user_ids ?? []));
+  const withoutPackage = activePeople.filter((p) => !allocatedIds.has(p.id));
+  const recentHires = [...activePeople]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 6);
+  const leaveSlices = toSlices(
+    leaveRequests.reduce<Record<string, number>>((acc, req) => {
+      acc[req.status] = (acc[req.status] ?? 0) + 1;
+      return acc;
+    }, {}),
+    LEAVE_COLORS,
+  );
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">{greeting(user?.first_name)} 👋</h1>
+        <p className="text-gray-500 text-sm mt-1">People, leave, and packages — not the project board</p>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <h2 className="font-semibold text-gray-900 mb-3">Post an announcement</h2>
+        <div className="space-y-2">
+          <input
+            value={announcementForm.title}
+            onChange={(e) => setAnnouncementForm({ ...announcementForm, title: e.target.value })}
+            placeholder="Title"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          />
+          <textarea
+            value={announcementForm.body}
+            onChange={(e) => setAnnouncementForm({ ...announcementForm, body: e.target.value })}
+            placeholder="Message for the company"
+            rows={3}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none"
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={announcementForm.is_pinned}
+                onChange={(e) => setAnnouncementForm({ ...announcementForm, is_pinned: e.target.checked })}
+              />
+              Pin to top
+            </label>
+            <button
+              type="button"
+              onClick={() => createAnnouncement.mutate()}
+              disabled={!announcementForm.title.trim() || !announcementForm.body.trim() || createAnnouncement.isPending}
+              className="ml-auto px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-indigo-700"
+            >
+              {createAnnouncement.isPending ? 'Posting…' : 'Post announcement'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="People" value={activePeople.length} icon={Users} color="bg-blue-500" href="/hr?tab=employees" />
+        <StatCard label="Leave queue" value={pendingLeave} icon={Calendar} color="bg-amber-500" href="/hr?tab=overview" />
+        <StatCard label="No package" value={withoutPackage.length} icon={Package} color="bg-rose-500" href="/hr?tab=leave-packages" />
+        <StatCard label="Packages" value={packages.length} icon={CheckCircle2} color="bg-emerald-500" href="/hr?tab=leave-packages" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <PanelHeader title="Pending leave" href="/hr?tab=overview" />
+          {pendingRequests.length === 0 ? (
+            <p className="text-gray-400 text-sm">Queue is clear</p>
+          ) : (
+            <div className="space-y-2">
+              {pendingRequests.slice(0, 8).map((req) => (
+                <Link
+                  key={req.id}
+                  href="/hr?tab=overview"
+                  className="block p-2.5 rounded-lg bg-amber-50/70 border border-amber-100 hover:bg-amber-50"
+                >
+                  <p className="text-sm font-medium text-gray-900 truncate">{req.employee_name ?? 'Team member'}</p>
+                  <p className="text-xs text-gray-500 capitalize mt-0.5">
+                    {req.type} · {formatDate(req.start_date)} – {formatDate(req.end_date)}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+        <DonutChart title="Leave requests" data={leaveSlices} empty="No leave requests" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <PanelHeader title="Recent people" href="/hr?tab=employees" />
+          {recentHires.length === 0 ? (
+            <p className="text-gray-400 text-sm">No people yet</p>
+          ) : (
+            <div className="space-y-1">
+              {recentHires.map((p) => (
+                <Link
+                  key={p.id}
+                  href="/hr?tab=employees"
+                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0 overflow-hidden">
+                    {p.avatar_url
+                      ? <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+                      : (p.first_name?.[0] ?? '') + (p.last_name?.[0] ?? '')}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{p.first_name} {p.last_name}</p>
+                    <p className="text-xs text-gray-400 truncate">{p.job_title || p.role} · {p.department_name || 'No department'}</p>
+                  </div>
+                  <span className="text-[11px] text-gray-400 shrink-0">{formatDate(p.created_at)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <PanelHeader title="Need a package" href="/hr?tab=leave-packages" />
+            {withoutPackage.length === 0 ? (
+              <p className="text-gray-400 text-sm">Everyone has a package</p>
+            ) : (
+              <div className="space-y-2">
+                {withoutPackage.slice(0, 8).map((p) => (
+                  <Link
+                    key={p.id}
+                    href="/hr?tab=leave-packages"
+                    className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-rose-50/70 border border-rose-100 hover:bg-rose-50"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{p.first_name} {p.last_name}</p>
+                      <p className="text-xs text-gray-500 truncate">{p.job_title || p.role}</p>
+                    </div>
+                    <span className="text-[11px] font-semibold text-rose-600 shrink-0">Allocate</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <PanelHeader title="Recent announcements" href="/hr" />
+            {announcements.length === 0 ? (
+              <p className="text-gray-400 text-sm">None posted yet — use the form at the top</p>
+            ) : (
+              <div className="space-y-2">
+                {announcements.slice(0, 4).map((a: any) => (
+                  <div key={a.id} className="p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-medium text-gray-900 text-sm">{a.title}</p>
+                      {a.is_pinned && (
+                        <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded shrink-0">Pinned</span>
+                      )}
+                    </div>
+                    {a.body && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{a.body}</p>}
+                    <p className="text-[11px] text-gray-400 mt-1">{a.author_name} · {formatDate(a.created_at)}</p>
+                  </div>
                 ))}
               </div>
             )}

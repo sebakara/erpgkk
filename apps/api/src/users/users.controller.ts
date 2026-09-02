@@ -54,7 +54,7 @@ export class UsersController {
   }))
   async uploadAvatar(@UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) {
     const url = `${process.env.API_URL ?? 'http://localhost:3001'}/uploads/${file.filename}`;
-    await this.usersService.update(user.id, { avatar_url: url });
+    await this.usersService.update(user.id, { avatar_url: url }, user);
     return { url };
   }
 
@@ -66,7 +66,7 @@ export class UsersController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Post()
-  @Roles(Role.Admin, Role.Manager, Role.Hr)
+  @Roles(Role.Hr)
   createEmployee(@CurrentUser() user: any, @Body() body: any) {
     return this.usersService.createEmployee(user.company_id, body);
   }
@@ -79,14 +79,14 @@ export class UsersController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.usersService.update(id, body);
+  update(@Param('id') id: string, @Body() body: any, @CurrentUser() user: any) {
+    return this.usersService.update(id, body, user);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Delete(':id')
   @Roles(Role.Admin, Role.Hr)
-  remove(@Param('id') id: string) {
-    return this.usersService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.usersService.remove(id, user);
   }
 }

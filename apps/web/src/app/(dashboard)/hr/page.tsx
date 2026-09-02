@@ -51,6 +51,7 @@ export default function HrPage() {
   const searchParams = useSearchParams();
   const isManager = user?.role !== 'employee';
   const isCeo = user?.role === 'admin';
+  const isHr = user?.role === 'hr';
   const canUseStandupNotes = user?.role === 'manager';
   const initialTab = searchParams.get('tab');
   const [tab, setTab] = useState<Tab>(() => {
@@ -100,10 +101,10 @@ export default function HrPage() {
         ))}
       </div>
 
-      {tab === 'overview' && <OverviewTab isManager={isManager} user={user} />}
-      {tab === 'employees' && <EmployeesTab isManager={isManager} currentUser={user} />}
+      {tab === 'overview' && <OverviewTab isManager={isManager} isHr={isHr} user={user} />}
+      {tab === 'employees' && <EmployeesTab isManager={isManager} isHr={isHr} currentUser={user} />}
       {tab === 'standup-notes' && canUseStandupNotes && <StandupNotesTab />}
-      {tab === 'leave-packages' && <LeavePackagesTab isManager={isManager} />}
+      {tab === 'leave-packages' && <LeavePackagesTab isHr={isHr} isCeo={isCeo} />}
       {tab === 'performance' && <PerformanceTab user={user} />}
       {tab === 'reports' && <ReportsTab />}
     </div>
@@ -111,10 +112,12 @@ export default function HrPage() {
 }
 
 /* ─── OVERVIEW TAB ─────────────────────────────────────────────────────── */
-function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
+function OverviewTab({ isManager, isHr, user }: { isManager: boolean; isHr: boolean; user: any }) {
   const qc = useQueryClient();
   const [showLeave, setShowLeave] = useState(false);
   const [leaveForm, setLeaveForm] = useState({ type: 'annual', start_date: '', end_date: '', reason: '' });
+  const [showAnnouncement, setShowAnnouncement] = useState(false);
+  const [announcementForm, setAnnouncementForm] = useState({ title: '', body: '', is_pinned: false });
 
   const { data: leaves = [] } = useQuery({
     queryKey: ['leaves', isManager ? 'all' : 'mine'],
@@ -165,6 +168,16 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['leaves'] }); toast.success('Leave rejected'); },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'You cannot reject this leave request'),
   });
+  const createAnnouncement = useMutation({
+    mutationFn: () => hrApi.announcements.create(announcementForm),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['announcements'] });
+      setShowAnnouncement(false);
+      setAnnouncementForm({ title: '', body: '', is_pinned: false });
+      toast.success('Announcement posted');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to post announcement'),
+  });
 
   // Group balance by leave_type (pick the first active package per type)
   const balanceMap = (balance as LeaveBalance[]).reduce<Record<string, LeaveBalance>>((acc, b) => {
@@ -204,9 +217,59 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
     <div className="space-y-5">
       {/* Announcements */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="font-semibold text-gray-900 mb-4">Announcements</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-gray-900">Announcements</h2>
+          {isHr && !showAnnouncement && (
+            <button
+              onClick={() => setShowAnnouncement(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              <Plus size={14} /> New announcement
+            </button>
+          )}
+        </div>
+        {isHr && showAnnouncement && (
+          <div className="mb-4 p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-2">
+            <input
+              value={announcementForm.title}
+              onChange={(e) => setAnnouncementForm({ ...announcementForm, title: e.target.value })}
+              placeholder="Title"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+            />
+            <textarea
+              value={announcementForm.body}
+              onChange={(e) => setAnnouncementForm({ ...announcementForm, body: e.target.value })}
+              placeholder="Message"
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none bg-white"
+            />
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={announcementForm.is_pinned}
+                onChange={(e) => setAnnouncementForm({ ...announcementForm, is_pinned: e.target.checked })}
+              />
+              Pin to top
+            </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowAnnouncement(false); setAnnouncementForm({ title: '', body: '', is_pinned: false }); }}
+                className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => createAnnouncement.mutate()}
+                disabled={!announcementForm.title.trim() || !announcementForm.body.trim() || createAnnouncement.isPending}
+                className="flex-1 px-3 py-1.5 bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {createAnnouncement.isPending ? 'Posting…' : 'Post'}
+              </button>
+            </div>
+          </div>
+        )}
         {(announcements as any[]).length === 0 ? (
-          <p className="text-gray-400 text-sm">No announcements</p>
+          <p className="text-gray-400 text-sm">{isHr ? 'No announcements yet. Post one for the company.' : 'No announcements'}</p>
         ) : (
           <div className="space-y-3">
             {(announcements as any[]).map((a) => (
@@ -763,7 +826,7 @@ function StandupNotesTab() {
 }
 
 /* ─── EMPLOYEES TAB ─────────────────────────────────────────────────────── */
-function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentUser: any }) {
+function EmployeesTab({ isManager, isHr, currentUser }: { isManager: boolean; isHr: boolean; currentUser: any }) {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
@@ -849,7 +912,7 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
           <option value="employee">Employee</option>
         </select>
         </>}
-        {isManager && (
+        {isHr && (
           <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors ml-auto">
             <Plus size={14} /> Add Employee
           </button>
@@ -943,7 +1006,6 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
                     <option value="employee">Employee</option>
                     <option value="manager">Manager</option>
                     <option value="hr">HR</option>
-                    <option value="admin">Admin</option>
                   </select>
                 </div>
                 <div>
@@ -1071,6 +1133,7 @@ function EmployeeProfileDrawer({ emp, isManager, currentUser, onClose }: { emp: 
   const deactivate = useMutation({
     mutationFn: () => usersApi.update(emp.id, { is_active: false }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['employees'] }); toast.success('Account deactivated'); onClose(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to deactivate'),
   });
 
   const startChat = useMutation({
@@ -1090,6 +1153,10 @@ function EmployeeProfileDrawer({ emp, isManager, currentUser, onClose }: { emp: 
 
   const p = profile ?? emp;
   const canEditAvatar = isSelf;
+  const canDeactivate = (currentUser?.role === 'hr' || currentUser?.role === 'admin')
+    && !isSelf
+    && p.is_active
+    && (currentUser?.role === 'admin' || p.role !== 'admin');
 
   const balanceMap = (balance as any[]).reduce<Record<string, any>>((acc, b) => {
     if (!acc[b.leave_type]) acc[b.leave_type] = b;
@@ -1260,8 +1327,8 @@ function EmployeeProfileDrawer({ emp, isManager, currentUser, onClose }: { emp: 
                 </Section>
               )}
 
-              {/* Danger zone — admin only, not self */}
-              {isManager && !isSelf && p.is_active && (
+              {/* Danger zone — HR, or CEO override. Not self, not an admin unless you are CEO. */}
+              {canDeactivate && (
                 <Section title="Danger Zone">
                   <button
                     onClick={() => { if (confirm(`Deactivate ${p.first_name}'s account?`)) deactivate.mutate(); }}
@@ -1302,7 +1369,7 @@ function Row({ icon, label, value }: { icon: React.ReactNode; label: string; val
 }
 
 /* ─── LEAVE PACKAGES TAB ────────────────────────────────────────────────── */
-function LeavePackagesTab({ isManager }: { isManager: boolean }) {
+function LeavePackagesTab({ isHr, isCeo }: { isHr: boolean; isCeo: boolean }) {
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [allocatePackage, setAllocatePackage] = useState<LeavePackage | null>(null);
@@ -1323,7 +1390,7 @@ function LeavePackagesTab({ isManager }: { isManager: boolean }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500">{packages.length} package{packages.length !== 1 ? 's' : ''}</p>
-        {isManager && (
+        {isHr && (
           <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors">
             <Plus size={15} /> New Package
           </button>
@@ -1362,20 +1429,24 @@ function LeavePackagesTab({ isManager }: { isManager: boolean }) {
                     ))}
                   </div>
                 </div>
-                {isManager && (
+                {(isHr || isCeo) && (
                   <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => setAllocatePackage(pkg)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 border border-primary-200 hover:bg-primary-50 rounded-lg transition-colors"
-                    >
-                      <Users size={14} /> Allocate
-                    </button>
-                    <button
-                      onClick={() => { if (confirm(`Delete "${pkg.name}"?`)) deleteMutation.mutate(pkg.id); }}
-                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    {isHr && (
+                      <button
+                        onClick={() => setAllocatePackage(pkg)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 border border-primary-200 hover:bg-primary-50 rounded-lg transition-colors"
+                      >
+                        <Users size={14} /> Allocate
+                      </button>
+                    )}
+                    {isCeo && (
+                      <button
+                        onClick={() => { if (confirm(`Delete "${pkg.name}"?`)) deleteMutation.mutate(pkg.id); }}
+                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

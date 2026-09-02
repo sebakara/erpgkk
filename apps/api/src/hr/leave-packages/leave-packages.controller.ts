@@ -33,13 +33,13 @@ export class LeavePackagesController {
   }
 
   @Post()
-  @Roles(Role.Admin, Role.Manager, Role.Hr)
+  @Roles(Role.Hr)
   create(@CurrentUser() user: any, @Body() body: any) {
     return this.svc.create(user.company_id, user.id, body);
   }
 
   @Patch(':id')
-  @Roles(Role.Admin, Role.Manager, Role.Hr)
+  @Roles(Role.Hr)
   update(@Param('id') id: string, @Body() body: any) {
     return this.svc.update(id, body);
   }
@@ -51,13 +51,13 @@ export class LeavePackagesController {
   }
 
   @Post(':id/allocate')
-  @Roles(Role.Admin, Role.Manager, Role.Hr)
+  @Roles(Role.Hr)
   allocate(@Param('id') id: string, @CurrentUser() user: any, @Body() body: { userIds: string[] | 'all' }) {
     return this.svc.allocate(id, user.company_id, body.userIds);
   }
 
   @Delete(':id/allocate/:userId')
-  @Roles(Role.Admin, Role.Manager, Role.Hr)
+  @Roles(Role.Hr)
   removeAllocation(@Param('id') id: string, @Param('userId') userId: string) {
     return this.svc.removeAllocation(id, userId);
   }

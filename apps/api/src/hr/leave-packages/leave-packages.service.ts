@@ -22,13 +22,21 @@ export class LeavePackagesService {
       )
       .orderBy('lp.period_start', 'desc');
 
+    const packageIds = packages.map((pkg) => pkg.id);
+    const allocs = packageIds.length
+      ? await this.knex('employee_leave_packages').whereIn('package_id', packageIds).select('package_id', 'user_id')
+      : [];
+    const byPackage = new Map<string, string[]>();
+    for (const row of allocs) {
+      const list = byPackage.get(row.package_id) ?? [];
+      list.push(row.user_id);
+      byPackage.set(row.package_id, list);
+    }
+
     for (const pkg of packages) {
       pkg.types = await this.knex('leave_package_types').where({ package_id: pkg.id });
-      pkg.employee_count = await this.knex('employee_leave_packages')
-        .where({ package_id: pkg.id })
-        .count('id as count')
-        .first()
-        .then((r: any) => Number(r?.count ?? 0));
+      pkg.allocated_user_ids = byPackage.get(pkg.id) ?? [];
+      pkg.employee_count = pkg.allocated_user_ids.length;
     }
     return packages;
   }

@@ -1,13 +1,28 @@
-import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, Optional } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
 import { MailService } from '../common/services/mail.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { ensureManagementDepartment } from '../common/access/management';
+import { Role } from '../common/enums';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
+
+type UserActor = { id: string; role: string; company_id: string };
+
+const SELF_FIELDS = new Set([
+  'first_name', 'last_name', 'job_title', 'avatar_url',
+  'phone', 'nid', 'address',
+  'bank_name', 'bank_account_name', 'bank_account_number',
+  'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation',
+]);
+
+const PEOPLE_FIELDS = new Set([
+  ...SELF_FIELDS,
+  'department_id', 'reports_to', 'role', 'is_active',
+]);
 
 @Injectable()
 export class UsersService {
@@ -73,22 +88,86 @@ export class UsersService {
     return q.where('u.id', callerId);
   }
 
-  async update(id: string, data: Partial<{
-    first_name: string; last_name: string; job_title: string;
-    avatar_url: string; department_id: string; reports_to: string; role: string; is_active: boolean;
-  }>) {
+  async update(
+    id: string,
+    data: Partial<{
+      first_name: string; last_name: string; job_title: string;
+      avatar_url: string; department_id: string; reports_to: string; role: string; is_active: boolean;
+      phone: string; nid: string; address: string;
+      bank_name: string; bank_account_name: string; bank_account_number: string;
+      emergency_contact_name: string; emergency_contact_phone: string; emergency_contact_relation: string;
+    }>,
+    actor: UserActor,
+  ) {
     const user = await this.knex('users').where({ id }).first();
     if (!user) throw new NotFoundException('User not found');
+    if (user.company_id !== actor.company_id) {
+      throw new ForbiddenException('You cannot update this person');
+    }
 
-    const nextRole = data.role ?? user.role;
-    const patch: Record<string, unknown> = { ...data, updated_at: new Date() };
+    const isSelf = actor.id === id;
+    const allowed = actor.role === Role.Admin
+      ? PEOPLE_FIELDS
+      : actor.role === Role.Hr
+        ? PEOPLE_FIELDS
+        : isSelf
+          ? SELF_FIELDS
+          : null;
+    if (!allowed) throw new ForbiddenException('You cannot update this person');
+
+    if (user.role === Role.Admin && actor.role !== Role.Admin && !isSelf) {
+      throw new ForbiddenException('You cannot change an admin');
+    }
+
+    if (data.role && data.role !== user.role) {
+      if (isSelf && actor.role !== Role.Admin) {
+        throw new ForbiddenException('You cannot change your own role');
+      }
+      if (actor.role !== Role.Admin && actor.role !== Role.Hr) {
+        throw new ForbiddenException('You cannot change roles');
+      }
+      if (data.role === Role.Admin && actor.role !== Role.Admin) {
+        throw new ForbiddenException('Only an admin can assign the admin role');
+      }
+    }
+
+    if (data.is_active === false) {
+      if (actor.role !== Role.Hr && actor.role !== Role.Admin) {
+        throw new ForbiddenException('Only HR can deactivate accounts');
+      }
+      if (isSelf) throw new BadRequestException('You cannot deactivate your own account');
+      if (user.role === Role.Admin && actor.role !== Role.Admin) {
+        throw new ForbiddenException('You cannot deactivate an admin');
+      }
+    } else if (data.is_active === true && actor.role !== Role.Hr && actor.role !== Role.Admin) {
+      throw new ForbiddenException('Only HR can reactivate accounts');
+    }
+
+    if (!isSelf && actor.role !== Role.Hr && actor.role !== Role.Admin) {
+      throw new ForbiddenException('You cannot update this person');
+    }
+
+    const patch: Record<string, unknown> = { updated_at: new Date() };
+    for (const [key, value] of Object.entries(data)) {
+      if (value === undefined) continue;
+      if (!allowed.has(key)) {
+        if (SELF_FIELDS.has(key) && isSelf) continue;
+        if (key === 'role' || key === 'is_active' || key === 'department_id' || key === 'reports_to') {
+          throw new ForbiddenException(`You cannot change ${key}`);
+        }
+        continue;
+      }
+      patch[key] = value;
+    }
+
+    const nextRole = (patch.role as string | undefined) ?? user.role;
     if (nextRole === 'manager') {
       patch.department_id = await ensureManagementDepartment(this.knex, user.company_id);
     }
 
     await this.knex('users').where({ id }).update(patch);
 
-    if (data.role && data.role !== user.role) {
+    if (patch.role && patch.role !== user.role) {
       await this.notificationsGateway?.notifyUser(id, {
         type: 'role_changed',
         title: 'Your role was updated',
@@ -127,6 +206,9 @@ export class UsersService {
     const company = await this.knex('companies').where({ id: companyId }).first();
 
     const role = data.role ?? 'employee';
+    if (role === Role.Admin) {
+      throw new ForbiddenException('Only an admin can create another admin');
+    }
     let department_id = data.department_id || null;
     if (role === 'manager') {
       department_id = await ensureManagementDepartment(this.knex, companyId);
@@ -226,9 +308,19 @@ export class UsersService {
     return { success: true };
   }
 
-  async remove(id: string) {
+  async remove(id: string, actor: UserActor) {
     const user = await this.findById(id);
     if (!user) throw new NotFoundException('User not found');
+    if (user.company_id !== actor.company_id) {
+      throw new ForbiddenException('You cannot update this person');
+    }
+    if (actor.role !== Role.Hr && actor.role !== Role.Admin) {
+      throw new ForbiddenException('Only HR can deactivate accounts');
+    }
+    if (actor.id === id) throw new BadRequestException('You cannot deactivate your own account');
+    if (user.role === Role.Admin && actor.role !== Role.Admin) {
+      throw new ForbiddenException('You cannot deactivate an admin');
+    }
     await this.knex('users').where({ id }).update({ is_active: false, updated_at: new Date() });
   }
 }

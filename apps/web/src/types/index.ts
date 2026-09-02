@@ -156,6 +156,7 @@ export interface LeavePackage {
   period_end: string;
   types: LeavePackageType[];
   employee_count?: number;
+  allocated_user_ids?: string[];
   created_at: string;
   updated_at: string;
 }

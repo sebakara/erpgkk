@@ -17,13 +17,13 @@ export class AnnouncementsController {
   }
 
   @Post()
-  @Roles(Role.Admin, Role.Manager, Role.Hr)
+  @Roles(Role.Hr)
   create(@CurrentUser() user: any, @Body() body: any) {
     return this.announcementsService.create(user.company_id, user.id, body);
   }
 
   @Patch(':id')
-  @Roles(Role.Admin, Role.Manager, Role.Hr)
+  @Roles(Role.Hr)
   update(@Param('id') id: string, @Body() body: any) {
     return this.announcementsService.update(id, body);
   }
