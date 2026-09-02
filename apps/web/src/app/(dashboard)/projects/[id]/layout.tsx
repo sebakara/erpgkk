@@ -39,7 +39,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
   const { id } = useParams<{ id: string }>();
   const pathname = usePathname();
   const user = useAuthStore((state) => state.user);
-  const canViewStandupNotes = user?.role === 'admin' || user?.role === 'manager';
+  const canViewStandupNotes = user?.role === 'manager';
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],

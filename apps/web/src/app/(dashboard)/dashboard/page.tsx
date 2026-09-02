@@ -4,7 +4,7 @@ import { projectsApi, hrApi, issuesApi, leavePackagesApi, usersApi } from '@/lib
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate, cn } from '@/lib/utils';
 import {
-  FolderOpen, Users, Calendar, CheckCircle2, Clock, Circle, Lock, ArrowRight, Megaphone,
+  FolderOpen, Users, Calendar, CheckCircle2, Clock, Circle, Lock, ArrowRight, Megaphone, Settings,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -15,9 +15,9 @@ import { ProjectPeople } from '@/components/projects/project-people';
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
-  const isEmployee = user?.role === 'employee';
-
-  return isEmployee ? <EmployeeDashboard user={user} /> : <ManagerDashboard user={user} />;
+  if (user?.role === 'employee') return <EmployeeDashboard user={user} />;
+  if (user?.role === 'admin') return <CeoDashboard user={user} />;
+  return <ManagerDashboard user={user} />;
 }
 
 function greeting(firstName?: string) {
@@ -169,8 +169,166 @@ function ProjectLoadChart({ rows }: { rows: WorkspaceStats['byProject'] }) {
   );
 }
 
+function CeoDashboard({ user }: { user: any }) {
+  const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
+    queryKey: ['projects'],
+    queryFn: projectsApi.list,
+  });
+  const { data: announcements = [] } = useQuery({ queryKey: ['announcements'], queryFn: hrApi.announcements.list });
+  const { data: leaveSummary = [] } = useQuery({ queryKey: ['leave-summary'], queryFn: hrApi.leave.summary });
+  const { data: leaveRequests = [] } = useQuery<LeaveRequest[]>({
+    queryKey: ['leaves', 'all'],
+    queryFn: () => hrApi.leave.list(),
+  });
+  const { data: people = [] } = useQuery<User[]>({ queryKey: ['employees'], queryFn: usersApi.list });
+  const { data: stats } = useQuery<WorkspaceStats>({
+    queryKey: ['workspace-stats'],
+    queryFn: projectsApi.workspaceStats,
+  });
+
+  const activeProjects = projects.filter((p) => p.status === 'active');
+  const teamCount = people.filter((p) => Boolean(p.is_active)).length;
+  const pendingLeave = Number(leaveSummary.find((s: any) => s.status === 'pending')?.count ?? 0);
+  const reportIds = new Set(people.filter((p) => p.reports_to === user?.id).map((p) => p.id));
+  const reportsPending = leaveRequests.filter(
+    (l) => l.status === 'pending' && (reportIds.has(l.user_id) || l.employee_reports_to === user?.id),
+  );
+  const pendingByDept = leaveRequests
+    .filter((l) => l.status === 'pending')
+    .reduce<Record<string, number>>((acc, req) => {
+      const person = people.find((p) => p.id === req.user_id);
+      const name = person?.department_name || 'Unassigned';
+      acc[name] = (acc[name] ?? 0) + 1;
+      return acc;
+    }, {});
+  const deptSlices = Object.entries(pendingByDept)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, value], i) => ({
+      name,
+      value,
+      color: ['#6366f1', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4'][i % 6],
+    }));
+  const unhealthy = (stats?.byProject ?? [])
+    .filter((row) => row.open > 0)
+    .sort((a, b) => b.open - a.open)
+    .slice(0, 8);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">{greeting(user?.first_name)} 👋</h1>
+        <p className="text-gray-500 text-sm mt-1">Company pulse — see everything, step in when a head needs you</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="People" value={teamCount} icon={Users} color="bg-blue-500" href="/hr?tab=employees" />
+        <StatCard label="Active projects" value={activeProjects.length} icon={FolderOpen} color="bg-indigo-500" href="/projects" />
+        <StatCard label="Leave pending" value={pendingLeave} icon={Calendar} color="bg-amber-500" href="/hr?tab=overview" />
+        <StatCard label="From your reports" value={reportsPending.length} icon={Users} color="bg-rose-500" href="/hr?tab=overview" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <DonutChart title="Pending leave by department" data={deptSlices} empty="No pending leave" />
+        <ProjectLoadChart rows={unhealthy} />
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <PanelHeader title="Announcements" href="/hr" />
+          {announcements.length === 0 ? (
+            <p className="text-sm text-gray-400 h-40 flex items-center justify-center">No announcements</p>
+          ) : (
+            <div className="space-y-2">
+              {announcements.slice(0, 5).map((a: any) => (
+                <div key={a.id} className="p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-gray-900 text-sm">{a.title}</p>
+                    {a.is_pinned && (
+                      <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded shrink-0">Pinned</span>
+                    )}
+                  </div>
+                  {a.body && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{a.body}</p>}
+                  <p className="text-[11px] text-gray-400 mt-1">{a.author_name} · {formatDate(a.created_at)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <PanelHeader title="Project health" href="/projects" />
+          {projectsLoading ? (
+            <p className="text-gray-400 text-sm">Loading…</p>
+          ) : unhealthy.length === 0 ? (
+            <p className="text-gray-400 text-sm">No open work across projects</p>
+          ) : (
+            <div className="space-y-1 max-h-[28rem] overflow-y-auto">
+              {unhealthy.map((row) => {
+                const project = projects.find((p) => p.id === row.id);
+                const pct = row.total ? Math.round((row.done / row.total) * 100) : 0;
+                return (
+                  <Link
+                    key={row.id}
+                    href={`/projects/${row.id}`}
+                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="text-xl w-8 text-center shrink-0">{project?.icon || '📁'}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 truncate">{row.name}</p>
+                      <p className="text-xs text-gray-400">{row.open} open · {pct}% done</p>
+                    </div>
+                    <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden shrink-0">
+                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="lg:col-span-2 space-y-4">
+          <Link
+            href="/settings"
+            className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4 hover:bg-slate-100/80 transition-colors"
+          >
+            <div className="p-2 bg-slate-800 text-white rounded-lg shrink-0"><Settings size={16} /></div>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-slate-950 text-sm">Company settings</p>
+              <p className="text-xs text-slate-600">Departments, heads, and roles</p>
+            </div>
+            <ArrowRight size={14} className="text-slate-400 shrink-0" />
+          </Link>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <PanelHeader title="Leave from your reports" href="/hr?tab=overview" />
+            <p className="text-xs text-gray-400 mb-3">Heads and HR handle the rest. You can still override any request.</p>
+            {reportsPending.length === 0 ? (
+              <p className="text-gray-400 text-sm">No pending leave from people who report to you</p>
+            ) : (
+              <div className="space-y-2">
+                {reportsPending.slice(0, 6).map((req) => (
+                  <Link
+                    key={req.id}
+                    href="/hr?tab=overview"
+                    className="block p-2.5 rounded-lg bg-amber-50/70 border border-amber-100 hover:bg-amber-50"
+                  >
+                    <p className="text-sm font-medium text-gray-900 truncate">{req.employee_name ?? 'Team member'}</p>
+                    <p className="text-xs text-gray-500 capitalize mt-0.5">
+                      {req.type} · {formatDate(req.start_date)} – {formatDate(req.end_date)}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ManagerDashboard({ user }: { user: any }) {
-  const canStandup = user?.role === 'admin' || user?.role === 'manager';
+  const canStandup = user?.role === 'manager';
   const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: projectsApi.list,

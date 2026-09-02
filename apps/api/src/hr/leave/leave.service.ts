@@ -29,6 +29,7 @@ export class LeaveService {
       .select(
         'l.*',
         'u.department_id as employee_department_id',
+        'u.reports_to as employee_reports_to',
         this.knex.raw("CONCAT(u.first_name, ' ', u.last_name) as employee_name"),
         'u.avatar_url as employee_avatar',
         this.knex.raw("CONCAT(a.first_name, ' ', a.last_name) as approver_name"),
@@ -71,6 +72,12 @@ export class LeaveService {
 
     await this.deptNotifier.notifyHead(userId, payload);
     await this.deptNotifier.notifyHr(companyId, payload, userId);
+    const homeHead = await this.knex('users as u')
+      .where('u.id', userId)
+      .leftJoin('departments as d', 'u.department_id', 'd.id')
+      .select('d.manager_id')
+      .first();
+    await this.deptNotifier.notifyReportsTo(userId, payload, [homeHead?.manager_id]);
 
     return req;
   }

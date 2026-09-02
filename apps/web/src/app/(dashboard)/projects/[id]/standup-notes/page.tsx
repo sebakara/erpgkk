@@ -19,7 +19,7 @@ function localDate(offsetDays = 0) {
 export default function ProjectStandupNotesPage() {
   const { id: projectId } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
-  const canView = user?.role === 'admin' || user?.role === 'manager';
+  const canView = user?.role === 'manager';
   const [dateFrom, setDateFrom] = useState(() => localDate(-30));
   const [dateTo, setDateTo] = useState(() => localDate());
   const [search, setSearch] = useState('');
@@ -35,7 +35,7 @@ export default function ProjectStandupNotesPage() {
       <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
         <Lock size={28} className="mx-auto mb-3 text-gray-300" />
         <p className="font-medium text-gray-700">Private leadership notes</p>
-        <p className="mt-1 text-sm text-gray-400">This area is available only to managers and admins.</p>
+        <p className="mt-1 text-sm text-gray-400">This area is available only to managers.</p>
       </div>
     );
   }

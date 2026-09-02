@@ -50,12 +50,10 @@ export class ChatService {
       .andWhere('c.type', 'department')
       .select('c.*', 'd.name as department_name');
 
-    if (user?.role !== 'admin') {
-      const managedIds = await this.knex('departments').where({ company_id: companyId, manager_id: userId }).pluck('id');
-      const deptIds = [user?.department_id, ...managedIds].filter(Boolean);
-      if (!deptIds.length) deptConvQuery = deptConvQuery.whereRaw('1=0');
-      else deptConvQuery = deptConvQuery.whereIn('c.department_id', deptIds);
-    }
+    const managedIds = await this.knex('departments').where({ company_id: companyId, manager_id: userId }).pluck('id');
+    const deptIds = [user?.department_id, ...managedIds].filter(Boolean);
+    if (!deptIds.length) deptConvQuery = deptConvQuery.whereRaw('1=0');
+    else deptConvQuery = deptConvQuery.whereIn('c.department_id', deptIds);
 
     const deptConvs = await deptConvQuery;
     const enrichedDept = await Promise.all(
@@ -116,18 +114,26 @@ export class ChatService {
     return { id };
   }
 
-  async getOrCreateProject(projectId: string, companyId: string) {
-    const existing = await this.knex('chat_conversations')
+  async getOrCreateProject(projectId: string, companyId: string, userId?: string) {
+    let conv = await this.knex('chat_conversations')
       .where({ company_id: companyId, type: 'project', project_id: projectId })
       .first();
 
-    if (existing) return existing;
+    if (!conv) {
+      const id = uuid();
+      await this.knex('chat_conversations').insert({
+        id, company_id: companyId, type: 'project', project_id: projectId,
+      });
+      conv = { id };
+    }
 
-    const id = uuid();
-    await this.knex('chat_conversations').insert({
-      id, company_id: companyId, type: 'project', project_id: projectId,
-    });
-    return { id };
+    if (userId) {
+      await this.knex('chat_conversation_members')
+        .insert({ conversation_id: conv.id, user_id: userId })
+        .onConflict(['conversation_id', 'user_id'])
+        .ignore();
+    }
+    return conv;
   }
 
   async getMessages(convId: string, userId: string, departmentId: string | null, role: string) {
@@ -199,8 +205,12 @@ export class ChatService {
       .select('id', 'first_name', 'last_name', 'avatar_url', 'job_title', 'department_id');
   }
 
-  getDepartments(companyId: string) {
-    return this.knex('departments').where('company_id', companyId).select('id', 'name');
+  async getDepartments(companyId: string, userId: string) {
+    const user = await this.knex('users').where({ id: userId }).first();
+    const managedIds = await this.knex('departments').where({ company_id: companyId, manager_id: userId }).pluck('id');
+    const deptIds = [user?.department_id, ...managedIds].filter(Boolean);
+    if (!deptIds.length) return [];
+    return this.knex('departments').where('company_id', companyId).whereIn('id', deptIds).select('id', 'name');
   }
 
   private async insertMessage(convId: string, senderId: string, content: string, kind: 'user' | 'system') {
@@ -340,10 +350,19 @@ export class ChatService {
   }
 
   private async accessibleProjects(userId: string, companyId: string, role?: string) {
-    if (await canManageAllProjects(this.knex, companyId, userId, role)) {
+    // Admins can open any project, but their inbox only lists rooms they joined
+    // or already belong to — not every company project.
+    if (role !== 'admin' && await canManageAllProjects(this.knex, companyId, userId, role)) {
       return this.knex('projects').where({ company_id: companyId }).whereNull('deleted_at').select('id');
     }
     const managedDepts = await this.knex('departments').where({ company_id: companyId, manager_id: userId }).pluck('id');
+    const joinedIds: string[] = await this.knex('chat_conversation_members as m')
+      .join('chat_conversations as c', 'm.conversation_id', 'c.id')
+      .where('m.user_id', userId)
+      .andWhere('c.type', 'project')
+      .whereNotNull('c.project_id')
+      .pluck('c.project_id');
+
     return this.knex('projects as p')
       .where('p.company_id', companyId)
       .whereNull('p.deleted_at')
@@ -354,6 +373,7 @@ export class ChatService {
           this.knex('issues as i').whereRaw('i.project_id = p.id').andWhere('i.assignee_id', userId),
         );
         if (managedDepts.length) b.orWhereIn('p.department_id', managedDepts);
+        if (joinedIds.length) b.orWhereIn('p.id', joinedIds);
       })
       .select('p.id');
   }
@@ -372,15 +392,14 @@ export class ChatService {
     if (conv.type === 'department' && conv.department_id) {
       const ids = await this.knex('users').where({ department_id: conv.department_id, is_active: true }).pluck('id');
       const head = await this.knex('departments').where({ id: conv.department_id }).select('manager_id').first();
-      const admins = await this.knex('users').where({ company_id: conv.company_id, role: 'admin', is_active: true }).pluck('id');
-      return [...new Set([...ids, head?.manager_id, ...admins].filter(Boolean))];
+      return [...new Set([...ids, head?.manager_id].filter(Boolean))];
     }
     if (conv.type === 'project' && conv.project_id) {
       const members = await this.knex('project_members').where('project_id', conv.project_id).pluck('user_id');
       const assignees = await this.knex('issues').where('project_id', conv.project_id).whereNotNull('assignee_id').pluck('assignee_id');
-      const admins = await this.knex('users').where({ company_id: conv.company_id, role: 'admin', is_active: true }).pluck('id');
+      const joined = await this.knex('chat_conversation_members').where('conversation_id', conv.id).pluck('user_id');
       const engHeads = await engineeringHeadIds(this.knex, conv.company_id);
-      return [...new Set([...members, ...assignees, ...admins, ...engHeads])];
+      return [...new Set([...members, ...assignees, ...joined, ...engHeads])];
     }
     return [];
   }

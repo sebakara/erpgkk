@@ -48,6 +48,19 @@ export class DeptNotifierService {
     }
   }
 
+  /** Notify the person's manager (reports_to), unless they are the actor or already covered. */
+  async notifyReportsTo(
+    actorUserId: string,
+    payload: { type: string; title: string; body?: string; data?: any },
+    exceptUserIds: (string | null | undefined)[] = [],
+  ): Promise<void> {
+    const user = await this.knex('users').where({ id: actorUserId }).select('reports_to').first();
+    const managerId: string | undefined = user?.reports_to;
+    if (!managerId || managerId === actorUserId) return;
+    if (exceptUserIds.filter(Boolean).includes(managerId)) return;
+    await this.gateway?.notifyUser(managerId, payload);
+  }
+
   /** Notify an arbitrary user (for notifying employees on allocation). */
   async notifyUser(
     userId: string,

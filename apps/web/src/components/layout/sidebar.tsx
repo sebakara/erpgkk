@@ -61,7 +61,7 @@ export function Sidebar() {
                 : 'text-indigo-200 hover:bg-indigo-800 hover:text-white',
             )}>
             <Icon size={17} />
-            <span className="flex-1">{label}</span>
+            <span className="flex-1">{href === '/hr' && user?.role === 'admin' ? 'People' : label}</span>
             {href === '/chat' && chatUnread > 0 && (
               <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center">
                 {chatUnread > 9 ? '9+' : chatUnread}

@@ -50,10 +50,11 @@ export default function HrPage() {
   const user = useAuthStore((s) => s.user);
   const searchParams = useSearchParams();
   const isManager = user?.role !== 'employee';
-  const canUseStandupNotes = user?.role === 'admin' || user?.role === 'manager';
+  const isCeo = user?.role === 'admin';
+  const canUseStandupNotes = user?.role === 'manager';
   const initialTab = searchParams.get('tab');
   const [tab, setTab] = useState<Tab>(() => {
-    if (initialTab === 'standup-notes' && (user?.role === 'admin' || user?.role === 'manager')) {
+    if (initialTab === 'standup-notes' && canUseStandupNotes) {
       return 'standup-notes';
     }
     if (initialTab === 'employees' || initialTab === 'leave-packages' || initialTab === 'performance' || initialTab === 'reports' || initialTab === 'overview') {
@@ -82,7 +83,7 @@ export default function HrPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-bold text-gray-900">{isManager ? 'HR Management' : 'My Workspace'}</h1>
+      <h1 className="text-xl font-bold text-gray-900">{isCeo ? 'People' : isManager ? 'HR Management' : 'My Workspace'}</h1>
 
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit flex-wrap">
         {tabs.map(({ key, label, icon }) => (
@@ -188,6 +189,17 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
     setShowLeave(true);
   };
 
+  const isCeo = user?.role === 'admin';
+  const leaveRows = [...(leaves as LeaveRequest[])].sort((a, b) => {
+    if (!isCeo) return 0;
+    const rank = (req: LeaveRequest) => {
+      if (req.status === 'pending' && req.employee_reports_to === user?.id) return 0;
+      if (req.status === 'pending') return 1;
+      return 2;
+    };
+    return rank(a) - rank(b);
+  });
+
   return (
     <div className="space-y-5">
       {/* Announcements */}
@@ -251,13 +263,26 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
 
       {/* Leave Requests */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-gray-900">
-            {user?.role === 'employee' ? 'My Leave Requests' : user?.role === 'manager' ? 'Department Leave Requests' : 'All Leave Requests'}
-          </h2>
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 className="font-semibold text-gray-900">
+              {user?.role === 'employee'
+                ? 'My Leave Requests'
+                : user?.role === 'manager'
+                  ? 'Department Leave Requests'
+                  : user?.role === 'admin'
+                    ? 'Company leave'
+                    : 'All Leave Requests'}
+            </h2>
+            {isCeo && (
+              <p className="text-xs text-gray-400 mt-1">
+                Heads and HR handle day-to-day. You can override any request.
+              </p>
+            )}
+          </div>
           <button
             onClick={openLeaveModal}
-            className="flex items-center gap-1.5 bg-primary-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary-700"
+            className="flex items-center gap-1.5 bg-primary-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary-700 shrink-0"
           >
             <Plus size={14} /> Request Leave
           </button>
@@ -275,11 +300,21 @@ function OverviewTab({ isManager, user }: { isManager: boolean; user: any }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {(leaves as LeaveRequest[]).map((l) => {
+              {leaveRows.map((l) => {
                 const days = Math.round((new Date(l.end_date).getTime() - new Date(l.start_date).getTime()) / 86400000) + 1;
+                const reportsToYou = isCeo && l.employee_reports_to === user?.id;
                 return (
                   <tr key={l.id} className="hover:bg-gray-50">
-                    {isManager && <td className="py-3 font-medium text-gray-900">{l.employee_name}</td>}
+                    {isManager && (
+                      <td className="py-3 font-medium text-gray-900">
+                        {l.employee_name}
+                        {reportsToYou && (
+                          <span className="ml-2 text-[10px] font-medium bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded">
+                            Reports to you
+                          </span>
+                        )}
+                      </td>
+                    )}
                     <td className="py-3 capitalize text-gray-700">{l.type}</td>
                     <td className="py-3 text-gray-600">{formatDate(l.start_date)} → {formatDate(l.end_date)}</td>
                     <td className="py-3 text-gray-600">{days}d</td>

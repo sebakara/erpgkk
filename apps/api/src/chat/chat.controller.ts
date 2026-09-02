@@ -25,7 +25,7 @@ export class ChatController {
 
   @Post('conversations/project')
   startProject(@CurrentUser() user: any, @Body('projectId') projectId: string) {
-    return this.chatService.getOrCreateProject(projectId, user.company_id);
+    return this.chatService.getOrCreateProject(projectId, user.company_id, user.id);
   }
 
   @Get('presence')
@@ -60,6 +60,6 @@ export class ChatController {
 
   @Get('departments')
   getDepartments(@CurrentUser() user: any) {
-    return this.chatService.getDepartments(user.company_id);
+    return this.chatService.getDepartments(user.company_id, user.id);
   }
 }

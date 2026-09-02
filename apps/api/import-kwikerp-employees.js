@@ -11,6 +11,12 @@
  * Usage:
  *   node apps/api/import-kwikerp-employees.js
  *   node apps/api/import-kwikerp-employees.js --apply
+ *   node apps/api/import-kwikerp-employees.js --fill-missing
+ *   node apps/api/import-kwikerp-employees.js --fill-missing --apply
+ *
+ * --fill-missing only backfills empty profile fields on people who already
+ * exist (matched by email). It does not create users, reset passwords, or
+ * change role, title, department, department heads, or projects.
  *
  * Env: apps/api/.env  (DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME)
  */
@@ -23,7 +29,32 @@ const bcrypt = require('bcryptjs');
 const { v4: uuid } = require('uuid');
 
 const APPLY = process.argv.includes('--apply');
+const FILL_MISSING = process.argv.includes('--fill-missing');
 const DEFAULT_PASSWORD = '12345678';
+
+const PROFILE_FIELDS = [
+  'phone',
+  'nid',
+  'address',
+  'bank_name',
+  'bank_account_name',
+  'bank_account_number',
+  'emergency_contact_name',
+  'emergency_contact_phone',
+  'emergency_contact_relation',
+];
+
+function isEmpty(value) {
+  return value == null || String(value).trim() === '';
+}
+
+function profilePatch(person, existing) {
+  const patch = {};
+  for (const field of PROFILE_FIELDS) {
+    if (isEmpty(existing[field]) && !isEmpty(person[field])) patch[field] = person[field];
+  }
+  return patch;
+}
 
 const SRC_DEPARTMENTS = [
   { src_id: 22, name: 'Administration' },
@@ -335,6 +366,77 @@ function userRow(id, companyId, deptId, reportsTo, passwordHash, person) {
   };
 }
 
+async function fillMissingProfiles(db) {
+  const summary = { fill: 0, keep: 0, missing: 0, skip: SKIPPED.length, reports: 0 };
+
+  console.log(`\nMode: FILL-MISSING ${APPLY ? 'APPLY (writes enabled)' : 'DRY-RUN (no writes)'}`);
+  console.log('Only empty profile fields are filled. Passwords, roles, titles, departments, and projects are left alone.');
+
+  console.log('\n── Skipped source rows');
+  for (const skip of SKIPPED) {
+    log('SKIP', `${skip.email} — ${skip.reason}`);
+  }
+
+  const emailToId = new Map();
+  for (const person of SRC_USERS) {
+    const existing = await db('users').where({ email: person.email.toLowerCase() }).first();
+    if (existing) emailToId.set(person.src_id, existing);
+  }
+
+  console.log('\n── Profile fields');
+  for (const person of SRC_USERS) {
+    const existing = emailToId.get(person.src_id);
+    if (!existing) {
+      summary.missing += 1;
+      log('SKIP', `${person.email} — not in this database`);
+      continue;
+    }
+
+    const patch = profilePatch(person, existing);
+    if (Object.keys(patch).length === 0) {
+      summary.keep += 1;
+      log('KEEP', `${person.first_name} ${person.last_name} <${person.email}> — profile already set or dump is empty`);
+      continue;
+    }
+
+    summary.fill += 1;
+    log('FILL', `${person.first_name} ${person.last_name} <${person.email}> · ${Object.keys(patch).join(', ')}`);
+    if (APPLY) {
+      await db('users').where({ id: existing.id }).update({ ...patch, updated_at: new Date() });
+    }
+  }
+
+  console.log('\n── Reports-to (only if currently empty)');
+  for (const person of SRC_USERS) {
+    if (!person.reports_to_src_id) continue;
+    const existing = emailToId.get(person.src_id);
+    const manager = emailToId.get(person.reports_to_src_id);
+    if (!existing || !manager) {
+      log('SKIP', `${person.email} — person or manager not in this database`);
+      continue;
+    }
+    if (!isEmpty(existing.reports_to)) {
+      log('KEEP', `${person.first_name} ${person.last_name} already has a manager`);
+      continue;
+    }
+    const managerPerson = SRC_USERS.find((other) => other.src_id === person.reports_to_src_id);
+    summary.reports += 1;
+    log('SET', `${person.first_name} ${person.last_name} → ${managerPerson.first_name} ${managerPerson.last_name}`);
+    if (APPLY) {
+      await db('users').where({ id: existing.id }).update({ reports_to: manager.id, updated_at: new Date() });
+    }
+  }
+
+  console.log('\n── Summary');
+  console.log(`  Profile  fill ${summary.fill}  keep ${summary.keep}  missing ${summary.missing}  skip ${summary.skip}`);
+  console.log(`  Reports  set ${summary.reports}`);
+  if (!APPLY) {
+    console.log('\nDry-run only. Re-run with --fill-missing --apply to write these fields.');
+  } else {
+    console.log('\nFill-missing complete. Existing values were not overwritten.');
+  }
+}
+
 async function importEmployees(db) {
   const summary = {
     departments: { insert: 0, exist: 0 },
@@ -531,7 +633,9 @@ async function main() {
 
   try {
     if (APPLY) {
-      await db.transaction((trx) => importEmployees(trx));
+      await db.transaction((trx) => (FILL_MISSING ? fillMissingProfiles(trx) : importEmployees(trx)));
+    } else if (FILL_MISSING) {
+      await fillMissingProfiles(db);
     } else {
       await importEmployees(db);
     }

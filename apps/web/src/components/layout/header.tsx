@@ -4,6 +4,7 @@ import { notificationsApi } from '@/lib/api';
 import { Bell } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAuthStore } from '@/store/auth.store';
 
 const BREADCRUMBS: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -14,13 +15,16 @@ const BREADCRUMBS: Record<string, string> = {
 
 export function Header() {
   const pathname = usePathname();
+  const user = useAuthStore((s) => s.user);
   const { data: count } = useQuery({
     queryKey: ['notif-count'],
     queryFn: notificationsApi.unreadCount,
     refetchInterval: 30_000,
   });
 
-  const title = BREADCRUMBS[pathname] || pathname.split('/').filter(Boolean).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' › ');
+  const title = pathname === '/hr' && user?.role === 'admin'
+    ? 'People'
+    : BREADCRUMBS[pathname] || pathname.split('/').filter(Boolean).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' › ');
 
   return (
     <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">

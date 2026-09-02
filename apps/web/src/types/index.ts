@@ -17,6 +17,8 @@ export interface User {
   role: Role;
   avatar_url?: string;
   job_title?: string;
+  reports_to?: string;
+  reports_to_name?: string;
   is_active: boolean;
   created_at: string;
 }
@@ -104,6 +106,8 @@ export interface LeaveRequest {
   id: string;
   user_id: string;
   employee_name?: string;
+  employee_reports_to?: string;
+  employee_department_id?: string;
   type: LeaveType;
   start_date: string;
   end_date: string;
