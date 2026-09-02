@@ -61,7 +61,7 @@ function ManagerDashboard({ user }: { user: any }) {
                     <p className="font-medium text-gray-900 truncate">{p.name}</p>
                     <p className="text-xs text-gray-500 capitalize">{p.status}</p>
                   </div>
-                  <ProjectPeople people={p.members} max={4} />
+                  <ProjectPeople people={p.members} max={4} href={`/projects/${p.id}/contributors`} />
                   <span className={`w-2 h-2 rounded-full shrink-0 ${p.status === 'active' ? 'bg-green-400' : 'bg-gray-300'}`} />
                 </Link>
               ))}

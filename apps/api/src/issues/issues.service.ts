@@ -65,6 +65,9 @@ export class IssuesService {
       ...data,
     });
     const issue = await this.findById(id);
+    if (data.assignee_id) {
+      await this.grantAccess(projectId, data.assignee_id);
+    }
     if (data.assignee_id && data.assignee_id !== reporterId) {
       this.notificationsGateway?.notifyUser(data.assignee_id, {
         type: 'issue_assigned',
@@ -79,6 +82,7 @@ export class IssuesService {
     await this.knex('issues').where({ id }).update({ ...data, updated_at: new Date() });
     const issue = await this.findById(id);
     if (data.assignee_id) {
+      await this.grantAccess(issue.project_id, data.assignee_id);
       this.notificationsGateway?.notifyUser(data.assignee_id, {
         type: 'issue_assigned',
         title: 'Issue assigned to you',
@@ -134,6 +138,9 @@ export class IssuesService {
       });
       const issue = await this.findById(id);
       created.push(issue);
+      if (item.assignee_id) {
+        await this.grantAccess(projectId, item.assignee_id);
+      }
       if (item.assignee_id && item.assignee_id !== reporterId) {
         this.notificationsGateway?.notifyUser(item.assignee_id, {
           type: 'issue_assigned',
@@ -147,5 +154,13 @@ export class IssuesService {
 
   remove(id: string) {
     return this.knex('issues').where({ id }).update({ deleted_at: new Date() });
+  }
+
+  private async grantAccess(projectId: string, userId?: string) {
+    if (!projectId || !userId) return;
+    await this.knex('project_members')
+      .insert({ id: uuid(), project_id: projectId, user_id: userId, role: 'member' })
+      .onConflict(['project_id', 'user_id'])
+      .ignore();
   }
 }

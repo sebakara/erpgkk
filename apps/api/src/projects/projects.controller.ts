@@ -34,15 +34,20 @@ export class ProjectsController {
   }
 
   @Post(':id/members')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager)
   addMember(@Param('id') id: string, @Body() body: { userId: string; role?: string }) {
     return this.projectsService.addMember(id, body.userId, body.role);
   }
 
   @Delete(':id/members/:userId')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager)
   removeMember(@Param('id') id: string, @Param('userId') userId: string) {
     return this.projectsService.removeMember(id, userId);
+  }
+
+  @Get(':id/contributors')
+  contributors(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.projectsService.contributors(id, user.company_id);
   }
 
   @Get(':id/analytics')

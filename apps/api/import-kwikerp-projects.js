@@ -284,9 +284,6 @@ async function importProjects(db) {
   }
 
   console.log('\n── Members');
-  const deptUsers = rnd
-    ? await db('users').where({ company_id: company.id, department_id: rnd.id, is_active: true }).select('id', 'email')
-    : [];
   const extraEmailsByProject = new Map();
   for (const [srcId, userIds] of Object.entries(SRC_PROJECT_MEMBER_USER_IDS)) {
     extraEmailsByProject.set(Number(srcId), emailsForUserIds(userIds));
@@ -305,7 +302,6 @@ async function importProjects(db) {
     if (!projectId) continue;
     const emails = new Set([
       owner.email.toLowerCase(),
-      ...deptUsers.map((u) => u.email.toLowerCase()),
       ...(extraEmailsByProject.get(p.src_id) || []),
     ]);
     for (const email of emails) {

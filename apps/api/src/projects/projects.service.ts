@@ -62,28 +62,16 @@ export class ProjectsService {
   private async attachPeople(projects: any[]) {
     if (!projects.length) return projects;
     const ids = projects.map((project) => project.id);
-    const departmentIds = [...new Set(projects.map((project) => project.department_id).filter(Boolean))];
 
-    const [members, assignees, owners, deptPeople] = await Promise.all([
+    const [members, owners] = await Promise.all([
       this.knex('project_members as pm')
         .join('users as u', 'pm.user_id', 'u.id')
         .whereIn('pm.project_id', ids)
         .select('pm.project_id', 'u.id', 'u.first_name', 'u.last_name', 'u.avatar_url'),
-      this.knex('issues as i')
-        .join('users as u', 'i.assignee_id', 'u.id')
-        .whereIn('i.project_id', ids)
-        .whereNotNull('i.assignee_id')
-        .select('i.project_id', 'u.id', 'u.first_name', 'u.last_name', 'u.avatar_url'),
       this.knex('projects as p')
         .join('users as u', 'p.owner_id', 'u.id')
         .whereIn('p.id', ids)
         .select('p.id as project_id', 'u.id', 'u.first_name', 'u.last_name', 'u.avatar_url'),
-      departmentIds.length
-        ? this.knex('users')
-          .whereIn('department_id', departmentIds)
-          .andWhere('is_active', true)
-          .select('id', 'department_id', 'first_name', 'last_name', 'avatar_url')
-        : Promise.resolve([]),
     ]);
 
     const byProject = new Map<string, Map<string, {
@@ -107,13 +95,7 @@ export class ProjectsService {
       }
     };
 
-    for (const row of [...members, ...assignees, ...owners]) add(row.project_id, row);
-    for (const project of projects) {
-      if (!project.department_id) continue;
-      for (const person of deptPeople) {
-        if (person.department_id === project.department_id) add(project.id, person);
-      }
-    }
+    for (const row of [...members, ...owners]) add(row.project_id, row);
 
     return projects.map((project) => ({
       ...project,
@@ -129,7 +111,7 @@ export class ProjectsService {
     const members = await this.knex('project_members as pm')
       .join('users as u', 'pm.user_id', 'u.id')
       .where('pm.project_id', id)
-      .select('u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.avatar_url', 'pm.role');
+      .select('u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.job_title', 'u.avatar_url', 'pm.role');
     return { ...project, members };
   }
 
@@ -157,14 +139,68 @@ export class ProjectsService {
   }
 
   async addMember(projectId: string, userId: string, role = 'member') {
+    const project = await this.knex('projects').where({ id: projectId }).whereNull('deleted_at').first();
+    if (!project) throw new NotFoundException('Project not found');
+    const user = await this.knex('users')
+      .where({ id: userId, company_id: project.company_id, is_active: true })
+      .first('id');
+    if (!user) throw new NotFoundException('Developer not found');
+
     await this.knex('project_members')
       .insert({ id: uuid(), project_id: projectId, user_id: userId, role })
       .onConflict(['project_id', 'user_id'])
       .merge({ role });
+    return this.findById(projectId, project.company_id);
   }
 
   async removeMember(projectId: string, userId: string) {
+    const owner = await this.knex('projects').where({ id: projectId }).first('owner_id');
+    if (owner?.owner_id === userId) {
+      throw new ForbiddenException('The project owner cannot be removed');
+    }
     await this.knex('project_members').where({ project_id: projectId, user_id: userId }).delete();
+  }
+
+  async contributors(id: string, companyId: string) {
+    const project = await this.findById(id, companyId);
+    const issues = await this.knex('issues')
+      .where({ project_id: id })
+      .whereNull('deleted_at')
+      .whereNotNull('assignee_id')
+      .select('assignee_id', 'status', 'story_points');
+
+    const statsByUser = new Map<string, {
+      total: number;
+      done: number;
+      in_progress: number;
+      story_points_completed: number;
+    }>();
+    for (const issue of issues) {
+      const stats = statsByUser.get(issue.assignee_id) ?? {
+        total: 0,
+        done: 0,
+        in_progress: 0,
+        story_points_completed: 0,
+      };
+      stats.total += 1;
+      if (issue.status === 'done') {
+        stats.done += 1;
+        stats.story_points_completed += issue.story_points ?? 0;
+      }
+      if (issue.status === 'in_progress' || issue.status === 'in_review') stats.in_progress += 1;
+      statsByUser.set(issue.assignee_id, stats);
+    }
+
+    const empty = { total: 0, done: 0, in_progress: 0, story_points_completed: 0 };
+    return (project.members ?? [])
+      .map((member: any) => ({
+        ...member,
+        contributions: statsByUser.get(member.id) ?? empty,
+      }))
+      .sort((a: any, b: any) =>
+        b.contributions.total - a.contributions.total
+        || `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`),
+      );
   }
 
   remove(id: string, companyId: string) {

@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { ProjectMember } from '@/types';
 
@@ -24,10 +25,12 @@ function firstLetter(person: Pick<ProjectMember, 'first_name' | 'last_name'>) {
 export function ProjectPeople({
   people,
   max = 5,
+  href,
   className,
 }: {
   people?: Pick<ProjectMember, 'id' | 'first_name' | 'last_name' | 'avatar_url'>[];
   max?: number;
+  href?: string;
   className?: string;
 }) {
   if (!people?.length) return null;
@@ -35,7 +38,7 @@ export function ProjectPeople({
   const shown = people.slice(0, max);
   const extra = people.length - shown.length;
 
-  return (
+  const avatars = (
     <div className={cn('flex items-center', className)}>
       <div className="flex -space-x-2">
         {shown.map((person) => {
@@ -71,5 +74,12 @@ export function ProjectPeople({
         )}
       </div>
     </div>
+  );
+
+  if (!href) return avatars;
+  return (
+    <Link href={href} onClick={(event) => event.stopPropagation()} className="hover:opacity-80">
+      {avatars}
+    </Link>
   );
 }

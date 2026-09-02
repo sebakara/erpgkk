@@ -62,7 +62,7 @@ export default function ProjectsPage() {
                   <div className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color || '#4f46e5' }} />
                   <span className="text-xs text-gray-400 truncate">View board →</span>
                 </div>
-                <ProjectPeople people={p.members} />
+                <ProjectPeople people={p.members} href={`/projects/${p.id}/contributors`} />
               </div>
             </Link>
           ))}

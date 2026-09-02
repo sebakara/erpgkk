@@ -27,6 +27,7 @@ export default function ProjectSettingsPage() {
     qc.invalidateQueries({ queryKey: ['project', id] });
     qc.invalidateQueries({ queryKey: ['projects'] });
     qc.invalidateQueries({ queryKey: ['project-members', id] });
+    qc.invalidateQueries({ queryKey: ['project-contributors', id] });
   };
 
   const updateMutation = useMutation({
@@ -66,8 +67,8 @@ export default function ProjectSettingsPage() {
   const available = (employees as any[]).filter((e) => e.is_active !== false && !memberIds.has(e.id));
 
   return (
-    <div className="max-w-lg space-y-5">
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4">
+    <div className={canManage ? 'grid grid-cols-1 lg:grid-cols-2 gap-5 items-start' : 'max-w-lg'}>
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4 min-w-0">
         <h2 className="font-semibold text-gray-900">General</h2>
 
         <div>
@@ -131,9 +132,11 @@ export default function ProjectSettingsPage() {
       </div>
 
       {canManage && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4">
-          <h2 className="font-semibold text-gray-900">Team</h2>
-          <p className="text-sm text-gray-500">Assign developers to this project.</p>
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4 min-w-0">
+          <h2 className="font-semibold text-gray-900">Access</h2>
+          <p className="text-sm text-gray-500">
+            Grant developers access to this project, like adding collaborators to a repository. They can then take issues, and their work shows on Contributors.
+          </p>
 
           <div className="flex gap-2">
             <select
@@ -158,9 +161,9 @@ export default function ProjectSettingsPage() {
             </button>
           </div>
 
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-gray-100 max-h-[28rem] overflow-y-auto">
             {members.length === 0 && (
-              <p className="text-sm text-gray-400 py-3">No developers assigned yet.</p>
+              <p className="text-sm text-gray-400 py-3">No developers have access yet.</p>
             )}
             {members.map((m: any) => (
               <div key={m.id} className="flex items-center gap-3 py-2.5">
@@ -173,7 +176,9 @@ export default function ProjectSettingsPage() {
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{m.first_name} {m.last_name}</p>
-                  <p className="text-xs text-gray-400 capitalize">{m.role ?? 'member'}</p>
+                  <p className="text-xs text-gray-400 truncate capitalize">
+                    {m.role ?? 'member'}{m.job_title ? ` · ${m.job_title}` : ''}
+                  </p>
                 </div>
                 {m.role !== 'owner' && (
                   <button

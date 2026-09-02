@@ -53,6 +53,7 @@ export interface ProjectMember {
   first_name: string;
   last_name: string;
   email: string;
+  job_title?: string;
   avatar_url?: string;
   role: 'owner' | 'member' | 'viewer';
 }

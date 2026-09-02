@@ -12,6 +12,7 @@ import {
   CircleDot,
   FolderOpen,
   Lock,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -28,6 +29,7 @@ const TABS: Array<{
   { label: 'Backlog',   segment: 'backlog',   icon: ListTodo   },
   { label: 'Docs',      segment: 'docs',      icon: FileText   },
   { label: 'Standup Notes', segment: 'standup-notes', icon: Lock, leadershipOnly: true },
+  { label: 'Contributors', segment: 'contributors', icon: Users },
   { label: 'Folder',    segment: 'folder',    icon: FolderOpen },
   { label: 'Analytics', segment: 'analytics', icon: BarChart2  },
   { label: 'Settings',  segment: 'settings',  icon: Settings   },
