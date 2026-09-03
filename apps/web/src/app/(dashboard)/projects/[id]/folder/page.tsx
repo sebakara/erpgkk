@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -51,8 +51,39 @@ export default function FolderPage() {
   const { user } = useAuthStore();
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [preview, setPreview] = useState<ProjectFile | null>(null);
+  const [preview, setPreview] = useState<(ProjectFile & { objectUrl: string }) | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (preview?.objectUrl) URL.revokeObjectURL(preview.objectUrl);
+    };
+  }, [preview?.objectUrl]);
+
+  const openFile = async (file: ProjectFile, mode: 'preview' | 'download') => {
+    setOpeningId(file.id);
+    try {
+      const blob = await filesApi.download(projectId, file.id);
+      const objectUrl = URL.createObjectURL(blob);
+      if (mode === 'download' || !isPreviewable(file.mime_type)) {
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = file.original_name;
+        a.click();
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
+      setPreview((prev) => {
+        if (prev?.objectUrl) URL.revokeObjectURL(prev.objectUrl);
+        return { ...file, objectUrl };
+      });
+    } catch {
+      toast.error('Could not open this file');
+    } finally {
+      setOpeningId(null);
+    }
+  };
 
   const { data: files = [], isLoading } = useQuery<ProjectFile[]>({
     queryKey: ['project-files', projectId],
@@ -142,34 +173,39 @@ export default function FolderPage() {
                   <FileIcon mime={file.mime_type} size={28} />
                 </div>
 
-                <div className="flex-1 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => openFile(file, isPreviewable(file.mime_type) ? 'preview' : 'download')}
+                  disabled={openingId === file.id}
+                  className="flex-1 min-w-0 text-left"
+                >
                   <p className="text-sm font-medium text-gray-800 truncate">{file.original_name}</p>
                   <p className="text-xs text-gray-400 mt-0.5">
                     {formatBytes(file.size)} · {formatDate(file.created_at)}
                     {file.uploader_name && <> · by <span className="text-gray-500">{file.uploader_name}</span></>}
                   </p>
-                </div>
+                </button>
 
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   {isPreviewable(file.mime_type) && (
                     <button
-                      onClick={() => setPreview(file)}
-                      className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                      onClick={() => openFile(file, 'preview')}
+                      disabled={openingId === file.id}
+                      className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
                       title="Preview"
                     >
                       <Eye size={16} />
                     </button>
                   )}
-                  <a
-                    href={file.url}
-                    download={file.original_name}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => openFile(file, 'download')}
+                    disabled={openingId === file.id}
+                    className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
                     title="Download"
                   >
                     <Download size={16} />
-                  </a>
+                  </button>
                   {canDelete && (
                     <button
                       onClick={() => deleteMutation.mutate(file.id)}
@@ -197,17 +233,18 @@ export default function FolderPage() {
                 <span className="text-sm font-semibold text-gray-800 truncate max-w-xs">{preview.original_name}</span>
               </div>
               <div className="flex items-center gap-2">
-                <a
-                  href={preview.url}
-                  download={preview.original_name}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  onClick={() => openFile(preview, 'download')}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                 >
                   <Download size={14} /> Download
-                </a>
+                </button>
                 <button
-                  onClick={() => setPreview(null)}
+                  onClick={() => {
+                    URL.revokeObjectURL(preview.objectUrl);
+                    setPreview(null);
+                  }}
                   className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   <X size={18} />
@@ -216,9 +253,9 @@ export default function FolderPage() {
             </div>
             <div className="flex-1 overflow-hidden rounded-b-2xl">
               {preview.mime_type.startsWith('image/') ? (
-                <img src={preview.url} alt={preview.original_name} className="w-full h-full object-contain p-4" />
+                <img src={preview.objectUrl} alt={preview.original_name} className="w-full h-full object-contain p-4" />
               ) : (
-                <iframe src={preview.url} className="w-full h-full min-h-[70vh]" title={preview.original_name} />
+                <iframe src={preview.objectUrl} className="w-full h-full min-h-[70vh]" title={preview.original_name} />
               )}
             </div>
           </div>

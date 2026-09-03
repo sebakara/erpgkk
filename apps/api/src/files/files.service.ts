@@ -2,6 +2,7 @@ import { Injectable, Inject, NotFoundException, Optional } from '@nestjs/common'
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { resolveStoredFile } from '../common/uploads';
 import { v4 as uuid } from 'uuid';
 
 @Injectable()
@@ -24,9 +25,20 @@ export class FilesService {
       .orderBy('f.created_at', 'desc');
   }
 
-  async create(projectId: string, uploadedBy: string, file: Express.Multer.File, apiUrl: string) {
+  async getStoredPath(fileId: string, projectId: string) {
+    const file = await this.knex('project_files')
+      .where({ id: fileId, project_id: projectId })
+      .whereNull('deleted_at')
+      .first();
+    if (!file) throw new NotFoundException('File not found');
+    const path = resolveStoredFile(file.stored_name);
+    if (!path) throw new NotFoundException('File is missing from storage');
+    return { file, path };
+  }
+
+  async create(projectId: string, uploadedBy: string, file: Express.Multer.File) {
     const id = uuid();
-    const url = `${apiUrl}/uploads/${file.filename}`;
+    const url = `/uploads/${file.filename}`;
     await this.knex('project_files').insert({
       id,
       project_id: projectId,

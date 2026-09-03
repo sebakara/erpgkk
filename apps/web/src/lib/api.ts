@@ -196,6 +196,14 @@ export const reportsApi = {
 // Project Files
 export const filesApi = {
   list: (projectId: string) => api.get(`/projects/${projectId}/files`).then((r) => r.data),
+  download: (projectId: string, fileId: string) =>
+    api.get(`/projects/${projectId}/files/${fileId}`, { responseType: 'blob' }).then((r) => {
+      const type = r.data?.type as string | undefined;
+      if (type && type.includes('application/json')) {
+        return Promise.reject(new Error('File not found'));
+      }
+      return r.data as Blob;
+    }),
   upload: (projectId: string, file: File) => {
     const fd = new FormData();
     fd.append('file', file);

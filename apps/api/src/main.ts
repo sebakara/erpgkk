@@ -4,9 +4,10 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { join, resolve } from 'path';
-import { mkdirSync, readdirSync } from 'fs';
+import { readdirSync } from 'fs';
 import knex from 'knex';
 import * as dotenv from 'dotenv';
+import { getUploadsDir } from './common/uploads';
 
 dotenv.config({ path: resolve(__dirname, '../.env') });
 
@@ -72,13 +73,10 @@ async function runMigrations() {
 async function bootstrap() {
   await runMigrations();
 
-  const uploadsDir = join(process.cwd(), 'uploads');
-  mkdirSync(uploadsDir, { recursive: true });
-
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   const config = app.get(ConfigService);
 
-  app.useStaticAssets(uploadsDir, { prefix: '/uploads' });
+  app.useStaticAssets(getUploadsDir(), { prefix: '/uploads' });
 
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
