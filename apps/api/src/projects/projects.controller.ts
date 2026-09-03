@@ -21,6 +21,12 @@ export class ProjectsController {
     return this.projectsService.workspaceStats(user.company_id, user.id, user.role);
   }
 
+  @Get(':id/overview')
+  @Roles(Role.Admin, Role.Manager)
+  overview(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.projectsService.overview(id, user.company_id);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.projectsService.findById(id, user.company_id);

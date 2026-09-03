@@ -13,6 +13,7 @@ import {
   FolderOpen,
   Lock,
   Users,
+  ClipboardList,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -23,7 +24,9 @@ const TABS: Array<{
   segment: string;
   icon: LucideIcon;
   leadershipOnly?: boolean;
+  overviewOnly?: boolean;
 }> = [
+  { label: 'Overview',  segment: 'overview',  icon: ClipboardList, overviewOnly: true },
   { label: 'Issues',    segment: 'issues',    icon: CircleDot  },
   { label: 'Board',     segment: 'board',     icon: LayoutGrid },
   { label: 'Backlog',   segment: 'backlog',   icon: ListTodo   },
@@ -40,6 +43,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const user = useAuthStore((state) => state.user);
   const canViewStandupNotes = user?.role === 'manager';
+  const canViewOverview = user?.role === 'admin' || user?.role === 'manager';
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
@@ -93,7 +97,10 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
 
         {/* Tab nav */}
         <nav className="flex gap-1 -mb-px overflow-x-auto">
-          {TABS.filter((tab) => !tab.leadershipOnly || canViewStandupNotes).map(({ label, segment, icon: Icon }) => {
+          {TABS.filter((tab) =>
+            (!tab.leadershipOnly || canViewStandupNotes)
+            && (!tab.overviewOnly || canViewOverview),
+          ).map(({ label, segment, icon: Icon }) => {
             const href = `/projects/${id}/${segment}`;
             const active = pathname === href || pathname.startsWith(`${href}/`);
             return (

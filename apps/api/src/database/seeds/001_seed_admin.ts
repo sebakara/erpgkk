@@ -9,8 +9,68 @@ const daysAhead = (n: number) => new Date(Date.now() + n * 86400000).toISOString
 const pick = <T>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 const hash = (pw: string) => bcrypt.hash(pw, 10);
 
+function ymd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Company standups run every Tuesday and Thursday. Newest first. */
+function standupDates(count: number, from = new Date()): string[] {
+  const dates: string[] = [];
+  const d = new Date(from);
+  d.setHours(12, 0, 0, 0);
+  while (dates.length < count) {
+    const day = d.getDay();
+    if (day === 2 || day === 4) dates.push(ymd(d));
+    d.setDate(d.getDate() - 1);
+  }
+  return dates;
+}
+
+function standupNoteContent(
+  firstName: string,
+  projectName: string,
+  ticket: string,
+  dateIdx: number,
+  personIdx: number,
+): string {
+  const yesterday = [
+    `landed review comments on "${ticket}"`,
+    `merged the first slice of "${ticket}"`,
+    `fixed the failing tests around "${ticket}"`,
+    `unblocked after the API contract for "${ticket}" was clarified`,
+    `demoed "${ticket}" and captured follow-ups`,
+  ];
+  const todayWork = [
+    'continuing on the same ticket',
+    'pairing on the remaining edge cases',
+    'writing tests and a short follow-up PR',
+    'moving the ticket into review',
+    'picking up the next sprint item after this lands',
+  ];
+  const blockers = [
+    'None.',
+    'Waiting on staging access.',
+    'Design sign-off still outstanding.',
+    'Blocked on a dependency from another team.',
+    'None — will ping if that changes.',
+  ];
+  const y = yesterday[(personIdx + dateIdx) % yesterday.length];
+  const t = todayWork[(personIdx * 2 + dateIdx) % todayWork.length];
+  const b = blockers[(personIdx + dateIdx * 2) % blockers.length];
+  return `${firstName} — ${projectName}\nYesterday: ${y}.\nToday: ${t}.\nBlockers: ${b}`;
+}
+
 export async function seed(knex: Knex): Promise<void> {
   /* ── wipe in FK-safe order ── */
+  if (await knex.schema.hasTable('standup_note_projects')) {
+    await knex('standup_note_projects').del();
+  }
+  if (await knex.schema.hasTable('standup_notes')) {
+    await knex('standup_notes').del();
+  }
   await knex('employee_leave_packages').del();
   await knex('leave_package_types').del();
   await knex('leave_packages').del();
@@ -425,15 +485,12 @@ export async function seed(knex: Knex): Promise<void> {
       company_id: companyId,
       author_id: adminId,
       title: 'Sprint 2 kickoff — all engineering teams',
-      body: 'Sprint 2 has officially started across all 5 projects. Please ensure your tasks are up to date in the Issues tracker. Daily standups are at 9:30 AM via Teams. Reach out to your project lead if you are blocked.',
+      body: 'Sprint 2 has officially started across all 5 projects. Please ensure your tasks are up to date in the Issues tracker. Standups are every Tuesday and Thursday at 9:30 AM via Teams. Reach out to your project lead if you are blocked.',
       is_pinned: false,
       created_at: new Date(Date.now() - 1 * 86400000),
     },
   ]);
 
-  /* ══════════════════════════════════════════════════
-     PERFORMANCE REVIEWS (sample)
-  ══════════════════════════════════════════════════ */
   await knex('performance_reviews').insert([
     {
       id: uuid(),
@@ -470,6 +527,34 @@ export async function seed(knex: Knex): Promise<void> {
     },
   ]);
 
+  /* ══════════════════════════════════════════════════
+     STANDUP NOTES — every Tuesday and Thursday
+  ══════════════════════════════════════════════════ */
+  const dates = standupDates(8);
+  const noteRows: Record<string, unknown>[] = [];
+  for (let dateIdx = 0; dateIdx < dates.length; dateIdx++) {
+    const date = dates[dateIdx];
+    for (const project of projects) {
+      const start = (dateIdx * 3) % developers.length;
+      const subjects = Array.from({ length: 4 }, (_, i) => developers[(start + i) % developers.length]);
+      const tickets = ISSUE_TEMPLATES[project.name] ?? [];
+      for (let personIdx = 0; personIdx < subjects.length; personIdx++) {
+        const dev = subjects[personIdx];
+        const ticket = tickets[(personIdx + dateIdx) % Math.max(tickets.length, 1)]?.title ?? 'sprint work';
+        noteRows.push({
+          id: uuid(),
+          company_id: companyId,
+          author_id: project.owner,
+          subject_user_id: dev.id,
+          project_id: project.id,
+          standup_date: date,
+          content: standupNoteContent(dev.first_name, project.name, ticket, dateIdx, personIdx),
+        });
+      }
+    }
+  }
+  await knex('standup_notes').insert(noteRows);
+
   console.log(`
 ✅ Seed complete!
 
@@ -498,7 +583,7 @@ export async function seed(knex: Knex): Promise<void> {
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   5 projects · 3 sprints each · 10 issues each
   1 leave package · 3 performance reviews
-  3 announcements
+  3 announcements · ${noteRows.length} standup notes (Tue/Thu)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `);
 }
