@@ -201,6 +201,14 @@ export class ChatService {
     return this.knex('departments').where('company_id', companyId).select('id', 'name');
   }
 
+  async postSystemMessage(projectId: string, companyId: string, senderId: string, content: string) {
+    const conv = await this.getOrCreateProject(projectId, companyId, senderId);
+    const msg = await this.insertMessage(conv.id, senderId, content, 'system');
+    const full = await this.knex('chat_conversations').where('id', conv.id).first();
+    await this.broadcast(full, msg);
+    return msg;
+  }
+
   private async insertMessage(convId: string, senderId: string, content: string, kind: 'user' | 'system') {
     const id = uuid();
     await this.knex('chat_messages').insert({

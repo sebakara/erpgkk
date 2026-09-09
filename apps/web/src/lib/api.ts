@@ -226,3 +226,48 @@ export const chatApi = {
   getUsers: () => api.get('/chat/users').then((r) => r.data),
   getDepartments: () => api.get('/chat/departments').then((r) => r.data),
 };
+
+// GitHub App
+export const githubApi = {
+  status: () => api.get('/integrations/github').then((r) => r.data),
+  install: (installation_id: string | number) =>
+    api.post('/integrations/github/install', { installation_id }).then((r) => r.data),
+  sync: () => api.post('/integrations/github/sync').then((r) => r.data),
+  update: (data: { notify_project_chat?: boolean }) =>
+    api.patch('/integrations/github', data).then((r) => r.data),
+  disconnect: () => api.delete('/integrations/github').then((r) => r.data),
+  companyRepos: () => api.get('/integrations/github/repos').then((r) => r.data),
+  people: () => api.get('/integrations/github/people').then((r) => r.data),
+  me: () => api.get('/integrations/github/me').then((r) => r.data),
+  mapMe: (github_username: string) =>
+    api.post('/integrations/github/me', { github_username }).then((r) => r.data),
+  unmapMe: () => api.delete('/integrations/github/me').then((r) => r.data),
+  mapUser: (userId: string, github_username: string) =>
+    api.post(`/integrations/github/users/${userId}`, { github_username }).then((r) => r.data),
+  unmapUser: (userId: string) =>
+    api.delete(`/integrations/github/users/${userId}`).then((r) => r.data),
+  projectOverview: (projectId: string) =>
+    api.get(`/projects/${projectId}/github/overview`).then((r) => r.data),
+  projectRepos: (projectId: string) =>
+    api.get(`/projects/${projectId}/github/repos`).then((r) => r.data),
+  availableRepos: (projectId: string) =>
+    api.get(`/projects/${projectId}/github/available-repos`).then((r) => r.data),
+  attachRepo: (projectId: string, repository_id: string, notify_chat?: boolean) =>
+    api.post(`/projects/${projectId}/github/repos`, { repository_id, notify_chat }).then((r) => r.data),
+  updateProjectRepo: (projectId: string, repoId: string, data: { notify_chat?: boolean }) =>
+    api.patch(`/projects/${projectId}/github/repos/${repoId}`, data).then((r) => r.data),
+  detachRepo: (projectId: string, repoId: string) =>
+    api.delete(`/projects/${projectId}/github/repos/${repoId}`).then((r) => r.data),
+  syncProject: (projectId: string) =>
+    api.post(`/projects/${projectId}/github/sync`).then((r) => r.data),
+  pullRequests: (projectId: string, state?: string) =>
+    api.get(`/projects/${projectId}/github/pull-requests`, { params: state ? { state } : {} }).then((r) => r.data),
+  commits: (projectId: string) =>
+    api.get(`/projects/${projectId}/github/commits`).then((r) => r.data),
+  releases: (projectId: string) =>
+    api.get(`/projects/${projectId}/github/releases`).then((r) => r.data),
+  issues: (projectId: string, state?: string) =>
+    api.get(`/projects/${projectId}/github/issues`, { params: state ? { state } : {} }).then((r) => r.data),
+  contributors: (projectId: string) =>
+    api.get(`/projects/${projectId}/github/contributors`).then((r) => r.data),
+};

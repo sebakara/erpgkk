@@ -1,19 +1,33 @@
 'use client';
-import { useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Building2, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
-import { companyApi, departmentsApi, usersApi } from '@/lib/api';
+import { Building2, Plus, Pencil, Trash2, Check, X, Github, RefreshCw, Unplug, ExternalLink } from 'lucide-react';
+import { companyApi, departmentsApi, usersApi, githubApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import type { Department } from '@/types';
 
-type Section = 'company' | 'departments' | 'members';
+type Section = 'company' | 'departments' | 'members' | 'integrations';
 
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={<Spinner />}>
+      <SettingsInner />
+    </Suspense>
+  );
+}
+
+function SettingsInner() {
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'admin';
-  const [section, setSection] = useState<Section>('company');
+  const searchParams = useSearchParams();
+  const [section, setSection] = useState<Section>(() =>
+    searchParams.get('section') === 'integrations' || searchParams.get('installation_id')
+      ? 'integrations'
+      : 'company',
+  );
 
   if (!isAdmin) {
     return (
@@ -28,6 +42,7 @@ export default function SettingsPage() {
     { key: 'company', label: 'Company' },
     { key: 'departments', label: 'Departments' },
     { key: 'members', label: 'Members' },
+    { key: 'integrations', label: 'Integrations' },
   ];
 
   return (
@@ -52,6 +67,7 @@ export default function SettingsPage() {
       {section === 'company' && <CompanySection />}
       {section === 'departments' && <DepartmentsSection />}
       {section === 'members' && <MembersSection />}
+      {section === 'integrations' && <IntegrationsSection />}
     </div>
   );
 }
@@ -357,6 +373,277 @@ function MembersSection() {
           <p className="px-5 py-8 text-sm text-gray-400 text-center">No members found.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ─── INTEGRATIONS ─────────────────────────────────────────────────────────── */
+function IntegrationsSection() {
+  const qc = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const installationId = searchParams.get('installation_id');
+
+  const { data: status, isLoading } = useQuery({
+    queryKey: ['github-status'],
+    queryFn: githubApi.status,
+  });
+  const { data: people = [] } = useQuery({
+    queryKey: ['github-people'],
+    queryFn: githubApi.people,
+    enabled: !!status?.connected,
+  });
+
+  const installMutation = useMutation({
+    mutationFn: (id: string) => githubApi.install(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['github-status'] });
+      qc.invalidateQueries({ queryKey: ['github-people'] });
+      toast.success('GitHub connected');
+      router.replace('/settings?section=integrations');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message ?? 'Failed to complete GitHub install'),
+  });
+
+  useEffect(() => {
+    if (installationId && status?.configured && !installMutation.isPending && !installMutation.isSuccess) {
+      installMutation.mutate(installationId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [installationId, status?.configured]);
+
+  const syncMutation = useMutation({
+    mutationFn: githubApi.sync,
+    onSuccess: (data: any) => {
+      qc.invalidateQueries({ queryKey: ['github-status'] });
+      toast.success(data?.errors?.length ? `Synced with ${data.errors.length} repo warning(s)` : 'GitHub synced');
+    },
+    onError: () => toast.error('Sync failed'),
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: githubApi.disconnect,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['github-status'] });
+      qc.invalidateQueries({ queryKey: ['github-people'] });
+      toast.success('GitHub disconnected');
+    },
+    onError: () => toast.error('Failed to disconnect'),
+  });
+
+  const chatMutation = useMutation({
+    mutationFn: (notify_project_chat: boolean) => githubApi.update({ notify_project_chat }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['github-status'] }),
+    onError: () => toast.error('Failed to update'),
+  });
+
+  const mapMutation = useMutation({
+    mutationFn: ({ userId, username }: { userId: string; username: string }) =>
+      githubApi.mapUser(userId, username),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['github-people'] });
+      toast.success('GitHub account linked');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message ?? 'Failed to link GitHub'),
+  });
+
+  const unmapMutation = useMutation({
+    mutationFn: (userId: string) => githubApi.unmapUser(userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['github-people'] });
+      toast.success('GitHub account unlinked');
+    },
+    onError: () => toast.error('Failed to unlink'),
+  });
+
+  if (isLoading) return <Spinner />;
+
+  const connected = !!status?.connected;
+  const inst = status?.installation;
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-lg bg-gray-900 text-white flex items-center justify-center shrink-0">
+            <Github size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-semibold text-gray-900">GitHub</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Read-only activity from your GitHub App installation. Used as evidence on projects — not as a score.
+            </p>
+          </div>
+          <span className={cn(
+            'text-xs px-2.5 py-1 rounded-full font-medium shrink-0',
+            connected ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600',
+          )}>
+            {connected ? 'Connected' : 'Not connected'}
+          </span>
+        </div>
+
+        {!status?.configured && (
+          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            GitHub App env vars are missing on the API. Set <code className="font-mono">GITHUB_APP_ID</code>,{' '}
+            <code className="font-mono">GITHUB_APP_SLUG</code>, and <code className="font-mono">GITHUB_PRIVATE_KEY</code>.
+          </p>
+        )}
+
+        {installMutation.isPending && (
+          <p className="text-sm text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">
+            Completing GitHub installation…
+          </p>
+        )}
+
+        {connected && inst && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <Stat label="Organization" value={inst.github_account_login} />
+            <Stat label="Repositories" value={String(status.repo_count)} />
+            <Stat label="Mapped to projects" value={String(status.mapped_repo_count)} />
+            <Stat label="Last sync" value={inst.last_synced_at ? new Date(inst.last_synced_at).toLocaleString() : 'Never'} />
+          </div>
+        )}
+
+        {connected && (
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={!!inst?.notify_project_chat}
+              onChange={(e) => chatMutation.mutate(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Post merged PRs and releases to project chat
+          </label>
+        )}
+
+        <div className="flex flex-wrap gap-2 justify-end">
+          {connected && inst?.manage_url && (
+            <a
+              href={inst.manage_url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <ExternalLink size={14} /> Manage on GitHub
+            </a>
+          )}
+          {connected && (
+            <button
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <RefreshCw size={14} className={syncMutation.isPending ? 'animate-spin' : ''} />
+              {syncMutation.isPending ? 'Syncing…' : 'Sync'}
+            </button>
+          )}
+          {connected ? (
+            <button
+              onClick={() => {
+                if (confirm('Disconnect GitHub? Project mappings and cached activity will be removed.')) {
+                  disconnectMutation.mutate();
+                }
+              }}
+              disabled={disconnectMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-50"
+            >
+              <Unplug size={14} /> Disconnect
+            </button>
+          ) : (
+            <a
+              href={status?.install_url || undefined}
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black',
+                !status?.install_url && 'pointer-events-none opacity-50',
+              )}
+            >
+              <Github size={14} /> Connect GitHub
+            </a>
+          )}
+        </div>
+      </div>
+
+      {connected && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900">People mapping</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Link a GitHub username to a CompanyOS user. No email auto-match.
+            </p>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {(people as any[]).map((person) => (
+              <PersonGitHubRow
+                key={person.id}
+                person={person}
+                onMap={(username) => mapMutation.mutate({ userId: person.id, username })}
+                onUnmap={() => unmapMutation.mutate(person.id)}
+                busy={mapMutation.isPending || unmapMutation.isPending}
+              />
+            ))}
+            {(people as any[]).length === 0 && (
+              <p className="px-5 py-8 text-sm text-gray-400 text-center">No members found.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-gray-50 rounded-lg px-3 py-2">
+      <p className="text-[11px] uppercase tracking-wide text-gray-400 font-medium">{label}</p>
+      <p className="text-sm font-semibold text-gray-900 truncate mt-0.5">{value}</p>
+    </div>
+  );
+}
+
+function PersonGitHubRow({
+  person,
+  onMap,
+  onUnmap,
+  busy,
+}: {
+  person: any;
+  onMap: (username: string) => void;
+  onUnmap: () => void;
+  busy: boolean;
+}) {
+  const [username, setUsername] = useState(person.github?.github_username ?? '');
+  return (
+    <div className="flex items-center gap-3 px-5 py-3">
+      <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0">
+        {(person.first_name?.[0] ?? '') + (person.last_name?.[0] ?? '')}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-900 truncate">{person.first_name} {person.last_name}</p>
+        <p className="text-xs text-gray-400 truncate">{person.email}</p>
+      </div>
+      <input
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        placeholder="github username"
+        className="w-40 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+      />
+      {person.github ? (
+        <button
+          onClick={onUnmap}
+          disabled={busy}
+          className="text-xs text-red-600 hover:underline disabled:opacity-50"
+        >
+          Unlink
+        </button>
+      ) : (
+        <button
+          onClick={() => username.trim() && onMap(username.trim())}
+          disabled={busy || !username.trim()}
+          className="text-xs text-primary-600 font-medium hover:underline disabled:opacity-50"
+        >
+          Link
+        </button>
+      )}
     </div>
   );
 }
