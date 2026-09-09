@@ -6,9 +6,9 @@ import { ConfigService } from '@nestjs/config';
 import { join, resolve } from 'path';
 import { mkdirSync, readdirSync } from 'fs';
 import knex from 'knex';
-import * as dotenv from 'dotenv';
+import { loadEnvFiles } from './load-env';
 
-dotenv.config({ path: resolve(__dirname, '../.env') });
+loadEnvFiles();
 
 function dbConnection() {
   const socketPath = process.env.DB_SOCKET;
@@ -92,5 +92,13 @@ async function bootstrap() {
   const port = config.get<number>('PORT', 3001);
   await app.listen(port);
   console.log(`API running → http://localhost:${port}/api`);
+
+  const githubKeys = ['GITHUB_APP_ID', 'GITHUB_APP_SLUG', 'GITHUB_PRIVATE_KEY'] as const;
+  const missingGithub = githubKeys.filter((key) => !String(config.get(key, '') || '').trim());
+  if (missingGithub.length) {
+    console.warn(`GitHub App is not configured. Missing: ${missingGithub.join(', ')}`);
+  } else {
+    console.log('GitHub App credentials loaded');
+  }
 }
 bootstrap();

@@ -484,8 +484,14 @@ function IntegrationsSection() {
 
         {!status?.configured && (
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-            GitHub App env vars are missing on the API. Set <code className="font-mono">GITHUB_APP_ID</code>,{' '}
-            <code className="font-mono">GITHUB_APP_SLUG</code>, and <code className="font-mono">GITHUB_PRIVATE_KEY</code>.
+            GitHub App env vars are missing on the API
+            {status?.missing_env?.length ? (
+              <>
+                : <code className="font-mono">{status.missing_env.join(', ')}</code>
+              </>
+            ) : null}
+            . Put them in <code className="font-mono">apps/api/.env</code> on the server (not the repo-root{' '}
+            <code className="font-mono">.env</code>), then restart the API.
           </p>
         )}
 

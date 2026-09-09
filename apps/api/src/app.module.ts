@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { resolve } from 'path';
+import { loadEnvFiles } from './load-env';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -22,7 +22,7 @@ import { NewslettersModule } from './newsletters/newsletters.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: resolve(__dirname, '../.env'),
+      ignoreEnvFile: true,
     }),
     DatabaseModule,
     AuthModule,
@@ -43,3 +43,5 @@ import { NewslettersModule } from './newsletters/newsletters.module';
   ],
 })
 export class AppModule {}
+
+loadEnvFiles();

@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   BadRequestException,
   ConflictException,
+  ServiceUnavailableException,
   Optional,
 } from '@nestjs/common';
 import { Knex } from 'knex';
@@ -51,6 +52,7 @@ export class GitHubService {
 
     return {
       configured: this.client.isConfigured(),
+      missing_env: this.client.missingEnv(),
       connected: !!installation && installation.status === 'active',
       install_url: this.client.isConfigured() ? this.client.installUrl(companyId) : null,
       installation: installation
@@ -75,7 +77,22 @@ export class GitHubService {
 
   async completeInstall(companyId: string, actorId: string, installationId: string | number) {
     if (!installationId) throw new BadRequestException('installation_id is required');
-    const ghInstall = await this.sync.fetchInstallation(installationId);
+    let ghInstall: any;
+    try {
+      ghInstall = await this.sync.fetchInstallation(installationId);
+    } catch (err: any) {
+      const status = err?.status ?? err?.response?.status;
+      this.logger.error(`GitHub installation lookup failed (${status ?? 'unknown'}): ${err?.message}`);
+      if (status === 401) {
+        throw new ServiceUnavailableException(
+          'GitHub rejected the App credentials. Check GITHUB_APP_ID and GITHUB_PRIVATE_KEY, then restart the API.',
+        );
+      }
+      if (status === 404) {
+        throw new NotFoundException('That GitHub installation was not found for this App.');
+      }
+      throw new ServiceUnavailableException(err?.message || 'Failed to talk to GitHub');
+    }
     const account = ghInstall.account as any;
     const githubInstallationId = asGhId(ghInstall.id);
     const githubAccountId = asGhId(account?.id);

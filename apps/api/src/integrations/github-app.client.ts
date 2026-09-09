@@ -11,7 +11,15 @@ export class GitHubAppClient {
   constructor(private readonly config: ConfigService) {}
 
   isConfigured(): boolean {
-    return !!(this.appId() && this.privateKey() && this.appSlug());
+    return this.missingEnv().length === 0;
+  }
+
+  missingEnv(): string[] {
+    const missing: string[] = [];
+    if (!this.appId() || !/^\d+$/.test(this.appId())) missing.push('GITHUB_APP_ID');
+    if (!this.appSlug()) missing.push('GITHUB_APP_SLUG');
+    if (!this.privateKeyLooksValid()) missing.push('GITHUB_PRIVATE_KEY');
+    return missing;
   }
 
   appSlug(): string {
@@ -89,10 +97,18 @@ export class GitHubAppClient {
     return key.replace(/\\n/g, '\n');
   }
 
+  private privateKeyLooksValid(): boolean {
+    const key = this.privateKey();
+    return key.includes('BEGIN') && key.includes('PRIVATE KEY') && key.includes('END');
+  }
+
   private assertConfigured() {
-    if (!this.appId() || !this.privateKey()) {
-      this.logger.warn('GitHub App credentials are missing');
-      throw new ServiceUnavailableException('GitHub App is not configured');
+    const missing = this.missingEnv();
+    if (missing.length) {
+      this.logger.warn(`GitHub App credentials are missing: ${missing.join(', ')}`);
+      throw new ServiceUnavailableException(
+        `GitHub App is not configured. Set ${missing.join(', ')} in apps/api/.env and restart the API.`,
+      );
     }
   }
 }

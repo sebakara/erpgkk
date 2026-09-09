@@ -28,8 +28,13 @@ export class GitHubWebhookController {
     @Headers('x-github-event') event: string,
     @Headers('x-github-delivery') deliveryId: string,
   ) {
+    const secret = this.client.webhookSecret();
+    if (!secret) {
+      return { ok: true, ignored: true };
+    }
+
     const rawBody = req.rawBody;
-    if (!rawBody || !verifyGitHubSignature(rawBody, signature, this.client.webhookSecret())) {
+    if (!rawBody || !verifyGitHubSignature(rawBody, signature, secret)) {
       this.logger.warn('GitHub webhook signature verification failed');
       throw new BadRequestException('Invalid GitHub signature');
     }
