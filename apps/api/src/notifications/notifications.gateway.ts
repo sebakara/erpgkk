@@ -69,6 +69,20 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
     return notif;
   }
 
+  async notifyUsers(
+    userIds: Iterable<string | null | undefined>,
+    payload: { type: string; title: string; body?: string; data?: any },
+    exceptUserId?: string,
+  ) {
+    const seen = new Set<string>();
+    if (exceptUserId) seen.add(exceptUserId);
+    for (const id of userIds) {
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      await this.notifyUser(id, payload);
+    }
+  }
+
   @SubscribeMessage('mark-read')
   async onMarkRead(@ConnectedSocket() client: Socket, @MessageBody() data: { id: string }) {
     await this.notificationsService.markRead(data.id, client.data.userId);

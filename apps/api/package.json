@@ -8,7 +8,8 @@
     "migrate": "knex migrate:latest --knexfile src/database/knexfile.ts",
     "migrate:make": "knex migrate:make --knexfile src/database/knexfile.ts",
     "migrate:rollback": "knex migrate:rollback --knexfile src/database/knexfile.ts",
-    "seed": "knex seed:run --knexfile src/database/knexfile.ts"
+    "seed": "knex seed:run --knexfile src/database/knexfile.ts",
+    "test:github": "node --test -r ts-node/register test/github.test.ts"
   },
   "dependencies": {
     "@nestjs/bull": "^10.1.1",
@@ -20,12 +21,15 @@
     "@nestjs/platform-express": "^10.4.22",
     "@nestjs/platform-socket.io": "^10.3.0",
     "@nestjs/websockets": "^10.3.0",
+    "@octokit/auth-app": "6.1.4",
+    "@octokit/rest": "20.1.2",
     "@types/multer": "^2.2.0",
     "@types/nodemailer": "^8.0.1",
     "bcryptjs": "^2.4.3",
     "bull": "^4.12.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "dotenv": "16.4.5",
     "knex": "^3.1.0",
     "multer": "^2.0.2",
     "mysql2": "^3.7.0",

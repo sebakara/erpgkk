@@ -12,6 +12,7 @@ const TABLES = [
   'sprints',
 ];
 
+/** Production may have recorded 009 without adding projects.deleted_at. */
 export async function up(knex: Knex): Promise<void> {
   for (const table of TABLES) {
     const hasTable = await knex.schema.hasTable(table);
@@ -25,10 +26,6 @@ export async function up(knex: Knex): Promise<void> {
   }
 }
 
-export async function down(knex: Knex): Promise<void> {
-  for (const table of TABLES) {
-    await knex.schema.alterTable(table, (t) => {
-      t.dropColumn('deleted_at');
-    });
-  }
+export async function down(): Promise<void> {
+  // Keep columns; 009 owns the original drop.
 }

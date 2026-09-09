@@ -6,9 +6,9 @@ import { ConfigService } from '@nestjs/config';
 import { join, resolve } from 'path';
 import { mkdirSync, readdirSync } from 'fs';
 import knex from 'knex';
-import * as dotenv from 'dotenv';
+import { loadEnvFiles } from './load-env';
 
-dotenv.config({ path: resolve(__dirname, '../.env') });
+loadEnvFiles();
 
 function dbConnection() {
   const socketPath = process.env.DB_SOCKET;
@@ -58,7 +58,12 @@ async function runMigrations() {
       if (!completed.includes(file)) {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const migration = require(join(migrationsDir, file));
-        await migration.up(db);
+        try {
+          await migration.up(db);
+        } catch (err) {
+          console.error(`Migration failed: ${file}`);
+          throw err;
+        }
         await db('knex_migrations').insert({ name: file, batch, migration_time: new Date() });
         console.log(`Migration ran: ${file}`);
       }
@@ -92,5 +97,16 @@ async function bootstrap() {
   const port = config.get<number>('PORT', 3001);
   await app.listen(port);
   console.log(`API running → http://localhost:${port}/api`);
+
+  const githubKeys = ['GITHUB_APP_ID', 'GITHUB_APP_SLUG', 'GITHUB_PRIVATE_KEY'] as const;
+  const missingGithub = githubKeys.filter((key) => !String(process.env[key] || '').trim());
+  if (missingGithub.length) {
+    console.warn(`GitHub App is not configured. Missing: ${missingGithub.join(', ')}`);
+  } else {
+    console.log('GitHub App credentials loaded');
+  }
 }
-bootstrap();
+bootstrap().catch((err) => {
+  console.error('API failed to start', err);
+  process.exit(1);
+});
