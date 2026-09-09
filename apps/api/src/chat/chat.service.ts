@@ -202,7 +202,7 @@ export class ChatService {
   }
 
   async postSystemMessage(projectId: string, companyId: string, senderId: string, content: string) {
-    const conv = await this.getOrCreateProject(projectId, companyId, senderId);
+    const conv = await this.getOrCreateProject(projectId, companyId);
     const msg = await this.insertMessage(conv.id, senderId, content, 'system');
     const full = await this.knex('chat_conversations').where('id', conv.id).first();
     await this.broadcast(full, msg);
