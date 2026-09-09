@@ -416,23 +416,30 @@ function IntegrationsSection() {
     mutationFn: githubApi.sync,
     onSuccess: (data: any) => {
       qc.invalidateQueries({ queryKey: ['github-status'] });
-      toast.success(data?.errors?.length ? `Synced with ${data.errors.length} repo warning(s)` : 'GitHub synced');
+      if (data?.errors?.length) {
+        toast.success(`Synced with ${data.errors.length} repo warning(s)`);
+      } else if ((data?.repo_count ?? data?.listed_repo_count ?? 0) === 0) {
+        toast.success('Synced — GitHub granted 0 repositories. Open Manage on GitHub and include all repos.');
+      } else {
+        toast.success('GitHub synced');
+      }
     },
     onError: () => toast.error('Sync failed'),
   });
 
   const disconnectMutation = useMutation({
-    mutationFn: githubApi.disconnect,
+    mutationFn: (installationId?: string) => githubApi.disconnect(installationId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['github-status'] });
       qc.invalidateQueries({ queryKey: ['github-people'] });
-      toast.success('GitHub disconnected');
+      toast.success('GitHub organization disconnected');
     },
     onError: () => toast.error('Failed to disconnect'),
   });
 
   const chatMutation = useMutation({
-    mutationFn: (notify_project_chat: boolean) => githubApi.update({ notify_project_chat }),
+    mutationFn: ({ installation_id, notify_project_chat }: { installation_id: string; notify_project_chat: boolean }) =>
+      githubApi.update({ installation_id, notify_project_chat }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['github-status'] }),
     onError: () => toast.error('Failed to update'),
   });
@@ -459,7 +466,12 @@ function IntegrationsSection() {
   if (isLoading) return <Spinner />;
 
   const connected = !!status?.connected;
-  const inst = status?.installation;
+  const orgs = (status?.installations?.length ? status.installations : status?.installation ? [status.installation] : []) as any[];
+  const lastSync = orgs
+    .map((org) => org.last_synced_at)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
 
   return (
     <div className="space-y-6">
@@ -471,14 +483,14 @@ function IntegrationsSection() {
           <div className="flex-1 min-w-0">
             <h2 className="font-semibold text-gray-900">GitHub</h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              Read-only activity from your GitHub App installation. Used as evidence on projects — not as a score.
+              Read-only activity from every GitHub organization this company connects. Used as evidence on projects — not as a score.
             </p>
           </div>
           <span className={cn(
             'text-xs px-2.5 py-1 rounded-full font-medium shrink-0',
             connected ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600',
           )}>
-            {connected ? 'Connected' : 'Not connected'}
+            {connected ? `${orgs.length} org${orgs.length === 1 ? '' : 's'} connected` : 'Not connected'}
           </span>
         </div>
 
@@ -501,38 +513,67 @@ function IntegrationsSection() {
           </p>
         )}
 
-        {connected && inst && (
+        {connected && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Stat label="Organization" value={inst.github_account_login} />
+            <Stat label="Organizations" value={String(orgs.length)} />
             <Stat label="Repositories" value={String(status.repo_count)} />
             <Stat label="Mapped to projects" value={String(status.mapped_repo_count)} />
-            <Stat label="Last sync" value={inst.last_synced_at ? new Date(inst.last_synced_at).toLocaleString() : 'Never'} />
+            <Stat label="Last sync" value={lastSync ? new Date(lastSync).toLocaleString() : 'Never'} />
           </div>
         )}
 
-        {connected && (
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={!!inst?.notify_project_chat}
-              onChange={(e) => chatMutation.mutate(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            Post merged PRs and releases to project chat
-          </label>
-        )}
+        {connected && orgs.map((org) => (
+          <div key={org.id} className="rounded-lg border border-gray-200 p-4 space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-gray-900">{org.github_account_login}</p>
+                <p className="text-xs text-gray-400">
+                  {org.account_type} · {org.repo_count ?? 0} repositories
+                  {org.repository_selection === 'all' ? ' · all repos' : ' · selected repos'}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {org.manage_url && (
+                  <a
+                    href={org.manage_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    <ExternalLink size={12} /> Manage
+                  </a>
+                )}
+                <button
+                  onClick={() => {
+                    if (confirm(`Disconnect ${org.github_account_login}? Mappings for that org’s repos will be removed.`)) {
+                      disconnectMutation.mutate(org.id);
+                    }
+                  }}
+                  disabled={disconnectMutation.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 rounded-lg text-xs font-medium hover:bg-red-50 disabled:opacity-50"
+                >
+                  <Unplug size={12} /> Disconnect
+                </button>
+              </div>
+            </div>
+            {org.repo_count === 0 && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                This organization granted 0 repositories. Open Manage, choose All repositories (or select the private ones), then Sync.
+              </p>
+            )}
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={!!org.notify_project_chat}
+                onChange={(e) => chatMutation.mutate({ installation_id: org.id, notify_project_chat: e.target.checked })}
+                className="rounded border-gray-300"
+              />
+              Post merged PRs and releases to project chat
+            </label>
+          </div>
+        ))}
 
         <div className="flex flex-wrap gap-2 justify-end">
-          {connected && inst?.manage_url && (
-            <a
-              href={inst.manage_url}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              <ExternalLink size={14} /> Manage on GitHub
-            </a>
-          )}
           {connected && (
             <button
               onClick={() => syncMutation.mutate()}
@@ -540,33 +581,25 @@ function IntegrationsSection() {
               className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
               <RefreshCw size={14} className={syncMutation.isPending ? 'animate-spin' : ''} />
-              {syncMutation.isPending ? 'Syncing…' : 'Sync'}
+              {syncMutation.isPending ? 'Syncing…' : 'Sync all'}
             </button>
           )}
-          {connected ? (
-            <button
-              onClick={() => {
-                if (confirm('Disconnect GitHub? Project mappings and cached activity will be removed.')) {
-                  disconnectMutation.mutate();
-                }
-              }}
-              disabled={disconnectMutation.isPending}
-              className="flex items-center gap-1.5 px-3 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-50"
-            >
-              <Unplug size={14} /> Disconnect
-            </button>
-          ) : (
-            <a
-              href={status?.install_url || undefined}
-              className={cn(
-                'flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black',
-                !status?.install_url && 'pointer-events-none opacity-50',
-              )}
-            >
-              <Github size={14} /> Connect GitHub
-            </a>
-          )}
+          <a
+            href={status?.install_url || undefined}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black',
+              !status?.install_url && 'pointer-events-none opacity-50',
+            )}
+          >
+            <Github size={14} /> {connected ? 'Connect another organization' : 'Connect GitHub'}
+          </a>
         </div>
+        {connected && (
+          <p className="text-xs text-gray-400">
+            The GitHub App must allow installation on any account (App settings → General → Where can this GitHub App
+            be installed?). Install it on the second org as an owner, then grant repository access and Sync all.
+          </p>
+        )}
       </div>
 
       {connected && (

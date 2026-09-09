@@ -1,14 +1,15 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { projectsApi, departmentsApi } from '@/lib/api';
+import { projectsApi, departmentsApi, githubApi } from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Plus, FolderOpen } from 'lucide-react';
+import { Plus, FolderOpen, GitBranch } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ProjectsPage() {
   const qc = useQueryClient();
   const { data: projects = [], isLoading } = useQuery({ queryKey: ['projects'], queryFn: projectsApi.list });
+  const { data: github } = useQuery({ queryKey: ['github-dashboard'], queryFn: githubApi.githubDashboard });
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', icon: '📁', color: '#4f46e5', department_id: '' });
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: departmentsApi.list, enabled: showNew });
@@ -41,8 +42,10 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map((p: any) => (
-            <Link key={p.id} href={`/projects/${p.id}`}
+          {projects.map((p: any) => {
+            const mapped = (github?.projects ?? []).find((g: any) => g.id === p.id)?.github_repos ?? 0;
+            return (
+            <Link key={p.id} href={mapped ? `/projects/${p.id}/development` : `/projects/${p.id}`}
               className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow group">
               <div className="flex items-start justify-between mb-3">
                 <span className="text-2xl">{p.icon || '📁'}</span>
@@ -50,12 +53,20 @@ export default function ProjectsPage() {
               </div>
               <h3 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">{p.name}</h3>
               {p.description && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{p.description}</p>}
-              <div className="mt-3 pt-3 border-t border-gray-50 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ background: p.color || '#4f46e5' }} />
-                <span className="text-xs text-gray-400">View board →</span>
+              <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full" style={{ background: p.color || '#4f46e5' }} />
+                  <span className="text-xs text-gray-400">{mapped ? 'Development →' : 'View board →'}</span>
+                </div>
+                {mapped > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+                    <GitBranch size={11} /> {mapped} repo{mapped === 1 ? '' : 's'}
+                  </span>
+                )}
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -233,10 +233,14 @@ export const githubApi = {
   install: (installation_id: string | number) =>
     api.post('/integrations/github/install', { installation_id }).then((r) => r.data),
   sync: () => api.post('/integrations/github/sync').then((r) => r.data),
-  update: (data: { notify_project_chat?: boolean }) =>
+  update: (data: { installation_id?: string; notify_project_chat?: boolean }) =>
     api.patch('/integrations/github', data).then((r) => r.data),
-  disconnect: () => api.delete('/integrations/github').then((r) => r.data),
-  companyRepos: () => api.get('/integrations/github/repos').then((r) => r.data),
+  disconnect: (installationId?: string) =>
+    (installationId
+      ? api.delete(`/integrations/github/installations/${installationId}`)
+      : api.delete('/integrations/github')
+    ).then((r) => r.data),
+  githubDashboard: () => api.get('/integrations/github/dashboard').then((r) => r.data),
   people: () => api.get('/integrations/github/people').then((r) => r.data),
   me: () => api.get('/integrations/github/me').then((r) => r.data),
   mapMe: (github_username: string) =>

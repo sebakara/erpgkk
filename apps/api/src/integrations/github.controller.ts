@@ -17,6 +17,11 @@ export class GitHubController {
     return this.github.status(user.company_id);
   }
 
+  @Get('dashboard')
+  dashboard(@CurrentUser() user: any) {
+    return this.github.workspaceDashboard(user);
+  }
+
   @Post('install')
   @Roles(Role.Admin)
   install(@CurrentUser() user: any, @Body() body: { installation_id: string | number }) {
@@ -31,8 +36,17 @@ export class GitHubController {
 
   @Patch()
   @Roles(Role.Admin)
-  update(@CurrentUser() user: any, @Body() body: { notify_project_chat?: boolean }) {
+  update(
+    @CurrentUser() user: any,
+    @Body() body: { installation_id?: string; notify_project_chat?: boolean },
+  ) {
     return this.github.updateInstallation(user.company_id, user.id, body);
+  }
+
+  @Delete('installations/:id')
+  @Roles(Role.Admin)
+  disconnectOne(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.github.disconnect(user.company_id, user.id, id);
   }
 
   @Delete()

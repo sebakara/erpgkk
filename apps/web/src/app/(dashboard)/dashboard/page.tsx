@@ -1,37 +1,50 @@
 'use client';
 import { useQuery } from '@tanstack/react-query';
-import { projectsApi, hrApi, issuesApi, leavePackagesApi } from '@/lib/api';
+import { projectsApi, hrApi, issuesApi, leavePackagesApi, githubApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
-import { formatDate, cn, getInitials } from '@/lib/utils';
-import { FolderOpen, Users, Calendar, TrendingUp, CheckCircle2, Clock, Circle } from 'lucide-react';
+import { formatDate, cn } from '@/lib/utils';
+import {
+  FolderOpen, Calendar, GitPullRequest, GitCommit, Github, Clock, Circle, CheckCircle2, GitBranch,
+} from 'lucide-react';
 import Link from 'next/link';
 import type { Issue, LeaveBalance } from '@/types';
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const isEmployee = user?.role === 'employee';
-
   return isEmployee ? <EmployeeDashboard user={user} /> : <ManagerDashboard user={user} />;
 }
 
-/* ── Manager / Admin dashboard (unchanged) ─────────────────────────────── */
+function useGitHubDashboard() {
+  return useQuery({
+    queryKey: ['github-dashboard'],
+    queryFn: githubApi.githubDashboard,
+  });
+}
+
 function ManagerDashboard({ user }: { user: any }) {
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: projectsApi.list });
   const { data: announcements = [] } = useQuery({ queryKey: ['announcements'], queryFn: hrApi.announcements.list });
   const { data: leaveSummary = [] } = useQuery({ queryKey: ['leave-summary'], queryFn: hrApi.leave.summary });
+  const { data: github } = useGitHubDashboard();
+  const ghProjects = github?.projects ?? [];
 
   const stats = [
-    { label: 'My Projects', value: projects.length, icon: FolderOpen, color: 'bg-indigo-500' },
-    { label: 'Active Sprints', value: projects.length, icon: TrendingUp, color: 'bg-green-500' },
-    { label: 'Leave Pending', value: leaveSummary.find((s: any) => s.status === 'pending')?.count || 0, icon: Calendar, color: 'bg-amber-500' },
-    { label: 'Team Members', value: '-', icon: Users, color: 'bg-blue-500' },
+    { label: 'Projects', value: projects.length, icon: FolderOpen, color: 'bg-indigo-500' },
+    { label: 'Open GitHub PRs', value: github?.open_prs ?? 0, icon: GitPullRequest, color: 'bg-slate-800' },
+    { label: 'Merged (30d)', value: github?.merged_prs_30d ?? 0, icon: GitCommit, color: 'bg-green-600' },
+    { label: 'Leave pending', value: leaveSummary.find((s: any) => s.status === 'pending')?.count || 0, icon: Calendar, color: 'bg-amber-500' },
   ];
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Good morning, {user?.first_name} 👋</h1>
-        <p className="text-gray-500 text-sm mt-1">Here's what's happening across your workspace</p>
+        <p className="text-gray-500 text-sm mt-1">
+          {github?.connected
+            ? `Engineering activity from ${github.organizations.map((o: any) => o.login).join(', ') || 'GitHub'}`
+            : "Here's what's happening across your workspace"}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -46,51 +59,139 @@ function ManagerDashboard({ user }: { user: any }) {
         ))}
       </div>
 
+      {user?.role === 'admin' && github?.connected && github.unmapped_project_count > 0 && (
+        <Link
+          href="/projects"
+          className="block text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 hover:bg-amber-100/60"
+        >
+          {github.unmapped_project_count} project{github.unmapped_project_count === 1 ? '' : 's'} have no GitHub
+          repository yet. Open a project → Development → Repositories → Attach.
+        </Link>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Projects</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-gray-900">Projects</h2>
+            <Link href="/projects" className="text-xs text-indigo-600 font-medium hover:underline">View all</Link>
+          </div>
           {projects.length === 0 ? (
             <p className="text-gray-400 text-sm">No projects yet</p>
           ) : (
-            <div className="space-y-3">
-              {projects.slice(0, 5).map((p: any) => (
-                <Link key={p.id} href={`/projects/${p.id}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors">
-                  <span className="text-xl">{p.icon || '📁'}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 truncate">{p.name}</p>
-                    <p className="text-xs text-gray-500 capitalize">{p.status}</p>
-                  </div>
-                  <span className={`w-2 h-2 rounded-full ${p.status === 'active' ? 'bg-green-400' : 'bg-gray-300'}`} />
-                </Link>
-              ))}
+            <div className="space-y-2">
+              {projects.slice(0, 6).map((p: any) => {
+                const mapped = ghProjects.find((g: any) => g.id === p.id)?.github_repos ?? 0;
+                return (
+                  <Link key={p.id} href={mapped ? `/projects/${p.id}/development` : `/projects/${p.id}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                    <span className="text-xl">{p.icon || '📁'}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 truncate">{p.name}</p>
+                      <p className="text-xs text-gray-500 capitalize">{p.status}</p>
+                    </div>
+                    {mapped > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">
+                        <GitBranch size={11} /> {mapped}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-gray-400">No GitHub</span>
+                    )}
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Announcements</h2>
-          {announcements.length === 0 ? (
-            <p className="text-gray-400 text-sm">No announcements</p>
-          ) : (
-            <div className="space-y-3">
-              {announcements.slice(0, 5).map((a: any) => (
-                <div key={a.id} className="p-3 rounded-lg bg-gray-50 border border-gray-100">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-medium text-gray-900 text-sm">{a.title}</p>
-                    {a.is_pinned && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Pinned</span>}
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">{a.author_name} · {formatDate(a.created_at)}</p>
+        <GitHubActivityCard github={github} />
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <h2 className="font-semibold text-gray-900 mb-4">Announcements</h2>
+        {announcements.length === 0 ? (
+          <p className="text-gray-400 text-sm">No announcements</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {announcements.slice(0, 4).map((a: any) => (
+              <div key={a.id} className="p-3 rounded-lg bg-gray-50 border border-gray-100">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-medium text-gray-900 text-sm">{a.title}</p>
+                  {a.is_pinned && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Pinned</span>}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                <p className="text-xs text-gray-500 mt-1">{a.author_name} · {formatDate(a.created_at)}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* ── Employee dashboard ─────────────────────────────────────────────────── */
+function GitHubActivityCard({ github }: { github: any }) {
+  if (!github) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <h2 className="font-semibold text-gray-900 mb-4">GitHub</h2>
+        <p className="text-gray-400 text-sm">Loading development activity…</p>
+      </div>
+    );
+  }
+  if (!github.connected) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <h2 className="font-semibold text-gray-900 mb-2 flex items-center gap-2"><Github size={16} /> GitHub</h2>
+        <p className="text-sm text-gray-500">GitHub is not connected yet. Admins can connect organizations in Settings → Integrations.</p>
+      </div>
+    );
+  }
+  if (!github.mapped_repo_count) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <h2 className="font-semibold text-gray-900 mb-2 flex items-center gap-2"><Github size={16} /> GitHub</h2>
+        <p className="text-sm text-gray-500">
+          {github.organizations.length} organization{github.organizations.length === 1 ? '' : 's'} connected.
+          Attach repositories on a project’s Development tab to see PRs and commits here.
+        </p>
+      </div>
+    );
+  }
+
+  const prs = github.recent_pull_requests ?? [];
+  const commits = github.recent_commits ?? [];
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-semibold text-gray-900 flex items-center gap-2"><Github size={16} /> Development</h2>
+        <p className="text-xs text-gray-400">{github.mapped_repo_count} mapped repos</p>
+      </div>
+      <div className="space-y-3">
+        {prs.slice(0, 4).map((pr: any) => (
+          <a key={pr.id} href={pr.html_url} target="_blank" rel="noreferrer" className="block rounded-lg hover:bg-gray-50 px-1 py-1">
+            <p className="text-sm font-medium text-gray-900 truncate">
+              {pr.repository}#{pr.number} {pr.title}
+            </p>
+            <p className="text-xs text-gray-400">
+              {pr.author_login ?? 'unknown'} · {pr.merged ? 'merged' : pr.state} · {formatDate(pr.github_updated_at)}
+            </p>
+          </a>
+        ))}
+        {prs.length === 0 && commits.slice(0, 4).map((c: any) => (
+          <a key={c.id} href={c.html_url} target="_blank" rel="noreferrer" className="block rounded-lg hover:bg-gray-50 px-1 py-1">
+            <p className="text-sm font-medium text-gray-900 truncate">{c.message}</p>
+            <p className="text-xs text-gray-400">
+              {c.author_login || c.author_name || 'unknown'} · {c.repository} · {formatDate(c.committed_at)}
+            </p>
+          </a>
+        ))}
+        {prs.length === 0 && commits.length === 0 && (
+          <p className="text-sm text-gray-400">No recent pull requests or commits. Sync GitHub from Settings.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const STATUS_ICON: Record<string, any> = {
   backlog: Circle, todo: Circle, in_progress: Clock, in_review: Clock, done: CheckCircle2,
 };
@@ -104,8 +205,8 @@ function EmployeeDashboard({ user }: { user: any }) {
   const { data: announcements = [] } = useQuery({ queryKey: ['announcements'], queryFn: hrApi.announcements.list });
   const { data: balance = [] } = useQuery<LeaveBalance[]>({ queryKey: ['leave-balance', 'mine'], queryFn: leavePackagesApi.myBalance });
   const { data: myLeave = [] } = useQuery({ queryKey: ['leaves', 'mine'], queryFn: hrApi.leave.mine });
+  const { data: github } = useGitHubDashboard();
 
-  // Fetch issues from all my projects and flatten
   const myProjectIds: string[] = projects.map((p: any) => p.id);
   const issueQueries = useQuery<Issue[]>({
     queryKey: ['my-issues-all', myProjectIds.join(',')],
@@ -119,13 +220,12 @@ function EmployeeDashboard({ user }: { user: any }) {
   const myIssues: Issue[] = (issueQueries.data ?? []).filter((i) => i.status !== 'done');
   const inProgress = myIssues.filter((i) => i.status === 'in_progress' || i.status === 'in_review');
   const upcoming = myIssues.filter((i) => i.status === 'todo' || i.status === 'backlog');
-
   const pendingLeave = (myLeave as any[]).filter((l) => l.status === 'pending').length;
 
   const stats = [
     { label: 'In Progress', value: inProgress.length, icon: Clock, color: 'bg-amber-500' },
     { label: 'To Do', value: upcoming.length, icon: Circle, color: 'bg-blue-500' },
-    { label: 'My Projects', value: projects.length, icon: FolderOpen, color: 'bg-indigo-500' },
+    { label: 'Open GitHub PRs', value: github?.open_prs ?? 0, icon: GitPullRequest, color: 'bg-slate-800' },
     { label: 'Leave Pending', value: pendingLeave, icon: Calendar, color: 'bg-rose-500' },
   ];
 
@@ -133,7 +233,7 @@ function EmployeeDashboard({ user }: { user: any }) {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Good morning, {user?.first_name} 👋</h1>
-        <p className="text-gray-500 text-sm mt-1">Here's your work for today</p>
+        <p className="text-gray-500 text-sm mt-1">Your tasks and GitHub activity on mapped projects</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -149,7 +249,6 @@ function EmployeeDashboard({ user }: { user: any }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* My tasks */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <h2 className="font-semibold text-gray-900 mb-4">My Open Tasks</h2>
           {myIssues.length === 0 ? (
@@ -185,9 +284,8 @@ function EmployeeDashboard({ user }: { user: any }) {
           )}
         </div>
 
-        {/* Right column */}
         <div className="space-y-4">
-          {/* Leave balance */}
+          <GitHubActivityCard github={github} />
           {balance.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
               <h2 className="font-semibold text-gray-900 mb-3">Leave Balance</h2>
@@ -202,8 +300,6 @@ function EmployeeDashboard({ user }: { user: any }) {
               <Link href="/hr" className="mt-3 block text-xs text-indigo-600 hover:text-indigo-700 font-medium">Request leave →</Link>
             </div>
           )}
-
-          {/* Announcements */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
             <h2 className="font-semibold text-gray-900 mb-3">Announcements</h2>
             {announcements.length === 0 ? (

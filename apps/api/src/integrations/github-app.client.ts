@@ -37,7 +37,11 @@ export class GitHubAppClient {
     return url.toString();
   }
 
-  manageUrl(installationId: string | number): string {
+  manageUrl(installationId: string | number, accountLogin?: string, accountType?: string): string {
+    const login = (accountLogin || '').trim();
+    if (login && String(accountType || '').toLowerCase() === 'organization') {
+      return `https://github.com/organizations/${encodeURIComponent(login)}/settings/installations/${installationId}`;
+    }
     return `https://github.com/settings/installations/${installationId}`;
   }
 

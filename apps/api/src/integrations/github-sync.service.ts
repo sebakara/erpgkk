@@ -57,20 +57,34 @@ export class GitHubSyncService {
   async syncInstallationRepositories(installationRow: any) {
     const octokit = await this.client.installationOctokit(installationRow.github_installation_id);
     const seen = new Set<string>();
+    let selection = installationRow.repository_selection;
+    let listed = 0;
 
-    for await (const page of octokit.paginate.iterator(octokit.rest.apps.listReposAccessibleToInstallation, {
-      per_page: 100,
-    })) {
-      const repos = Array.isArray(page.data)
-        ? page.data
-        : ((page.data as any)?.repositories ?? []);
-      for (const repo of repos) {
-        const mapped = mapRepository(repo);
-        if (!mapped.github_repository_id) continue;
-        seen.add(mapped.github_repository_id);
-        await this.upsertRepository(installationRow.id, mapped);
-      }
+    const repos = await octokit.paginate(
+      octokit.rest.apps.listReposAccessibleToInstallation,
+      { per_page: 100 },
+      (response: any) => {
+        const data = response?.data;
+        if (data?.repository_selection) selection = data.repository_selection;
+        if (Array.isArray(data)) {
+          if ((data as any).repository_selection) selection = (data as any).repository_selection;
+          return data.filter((item: any) => item && typeof item === 'object' && item.id != null);
+        }
+        return Array.isArray(data?.repositories) ? data.repositories : [];
+      },
+    );
+
+    for (const repo of repos) {
+      const mapped = mapRepository(repo);
+      if (!mapped.github_repository_id) continue;
+      listed += 1;
+      seen.add(mapped.github_repository_id);
+      await this.upsertRepository(installationRow.id, mapped);
     }
+
+    this.logger.log(
+      `GitHub listed ${listed} repositories for ${installationRow.github_account_login} (selection=${selection})`,
+    );
 
     if (seen.size) {
       const stale = await this.knex('github_repositories')
@@ -82,9 +96,12 @@ export class GitHubSyncService {
     }
 
     await this.knex('github_installations').where('id', installationRow.id).update({
+      repository_selection: selection ?? installationRow.repository_selection,
       last_synced_at: new Date(),
       updated_at: new Date(),
     });
+
+    return { repo_count: seen.size, repository_selection: selection };
   }
 
   async syncRepoActivity(repo: any) {
