@@ -7,8 +7,8 @@
     "pnpm": ">=9"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter @gkkerp/api --filter @gkkerp/web dev",
-    "build": "pnpm -r --if-present build",
+    "dev": "node api.js && pnpm --parallel --filter @gkkerp/api --filter @gkkerp/web dev",
+    "build": "node api.js && pnpm -r --if-present build",
     "db:migrate": "pnpm --filter @gkkerp/api migrate",
     "db:migrate:make": "pnpm --filter @gkkerp/api migrate:make",
     "db:seed": "pnpm --filter @gkkerp/api seed",
