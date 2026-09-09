@@ -11,6 +11,7 @@ import { verifyGitHubSignature } from '../src/integrations/github-webhooks/verif
 import { claimDelivery } from '../src/integrations/github-webhooks/process';
 import { mapIssue, mapPullRequest, mapRepository } from '../src/integrations/github-mappers';
 import { GitHubService } from '../src/integrations/github.service';
+import { parseEnvFile } from '../src/load-env';
 
 dotenv.config({ path: resolve(__dirname, '../.env') });
 
@@ -20,6 +21,16 @@ function signedBody(secret: string, payload: string) {
     signature: 'sha256=' + createHmac('sha256', secret).update(payload).digest('hex'),
   };
 }
+
+test('unquoted GitHub PEM blocks in .env parse as a full private key', () => {
+  const parsed = parseEnvFile(
+    'GITHUB_APP_ID=12345\nGITHUB_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----\nMIIE\n-----END RSA PRIVATE KEY-----\nGITHUB_APP_SLUG=gkk-ops\n',
+  );
+  assert.equal(parsed.GITHUB_APP_ID, '12345');
+  assert.equal(parsed.GITHUB_APP_SLUG, 'gkk-ops');
+  assert.equal(parsed.GITHUB_PRIVATE_KEY.includes('BEGIN RSA PRIVATE KEY'), true);
+  assert.equal(parsed.GITHUB_PRIVATE_KEY.includes('END RSA PRIVATE KEY'), true);
+});
 
 test('GitHub webhook signatures reject tampered or missing HMAC', () => {
   const secret = 'webhook-secret';

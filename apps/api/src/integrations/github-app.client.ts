@@ -23,11 +23,11 @@ export class GitHubAppClient {
   }
 
   appSlug(): string {
-    return this.config.get<string>('GITHUB_APP_SLUG', '').trim();
+    return this.env('GITHUB_APP_SLUG');
   }
 
   webhookSecret(): string {
-    return this.config.get<string>('GITHUB_WEBHOOK_SECRET', '');
+    return this.env('GITHUB_WEBHOOK_SECRET');
   }
 
   installUrl(state?: string): string {
@@ -84,17 +84,25 @@ export class GitHubAppClient {
     this.tokenCache.delete(String(installationId));
   }
 
+  private env(name: string): string {
+    const fromProcess = process.env[name];
+    const fromConfig = this.config.get<string>(name);
+    const raw = (fromProcess != null && String(fromProcess).trim() !== '')
+      ? String(fromProcess)
+      : String(fromConfig ?? '');
+    return raw.trim();
+  }
+
   private appId(): string {
-    return String(this.config.get('GITHUB_APP_ID', '')).trim();
+    return this.env('GITHUB_APP_ID');
   }
 
   private privateKey(): string {
-    let key = this.config.get<string>('GITHUB_PRIVATE_KEY', '') || '';
-    key = key.trim();
+    let key = this.env('GITHUB_PRIVATE_KEY');
     if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
       key = key.slice(1, -1);
     }
-    return key.replace(/\\n/g, '\n');
+    return key.replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
   }
 
   private privateKeyLooksValid(): boolean {

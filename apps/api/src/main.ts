@@ -94,7 +94,7 @@ async function bootstrap() {
   console.log(`API running → http://localhost:${port}/api`);
 
   const githubKeys = ['GITHUB_APP_ID', 'GITHUB_APP_SLUG', 'GITHUB_PRIVATE_KEY'] as const;
-  const missingGithub = githubKeys.filter((key) => !String(config.get(key, '') || '').trim());
+  const missingGithub = githubKeys.filter((key) => !String(process.env[key] || '').trim());
   if (missingGithub.length) {
     console.warn(`GitHub App is not configured. Missing: ${missingGithub.join(', ')}`);
   } else {

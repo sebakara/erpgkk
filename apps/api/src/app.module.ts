@@ -23,6 +23,7 @@ import { NewslettersModule } from './newsletters/newsletters.module';
     ConfigModule.forRoot({
       isGlobal: true,
       ignoreEnvFile: true,
+      load: [() => ({ ...process.env })],
     }),
     DatabaseModule,
     AuthModule,
