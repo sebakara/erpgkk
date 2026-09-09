@@ -58,7 +58,12 @@ async function runMigrations() {
       if (!completed.includes(file)) {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const migration = require(join(migrationsDir, file));
-        await migration.up(db);
+        try {
+          await migration.up(db);
+        } catch (err) {
+          console.error(`Migration failed: ${file}`);
+          throw err;
+        }
         await db('knex_migrations').insert({ name: file, batch, migration_time: new Date() });
         console.log(`Migration ran: ${file}`);
       }
@@ -101,4 +106,7 @@ async function bootstrap() {
     console.log('GitHub App credentials loaded');
   }
 }
-bootstrap();
+bootstrap().catch((err) => {
+  console.error('API failed to start', err);
+  process.exit(1);
+});
