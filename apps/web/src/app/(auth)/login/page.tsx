@@ -72,11 +72,6 @@ export default function LoginPage() {
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
-        <p className="text-center text-sm text-gray-500 mt-6">
-          New company?{' '}
-          <Link href="/register" className="text-primary-600 font-medium hover:underline">Create workspace</Link>
-        </p>
-        <p className="text-center text-xs text-gray-400 mt-4">Demo: admin@gkk.com / Admin@1234</p>
       </div>
     </div>
   );
