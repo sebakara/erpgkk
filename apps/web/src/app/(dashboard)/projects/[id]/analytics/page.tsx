@@ -3,11 +3,12 @@ import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
+  PieChart, Pie, Cell,
 } from 'recharts';
+import Link from 'next/link';
 import { projectsApi } from '@/lib/api';
-import { TrendingUp, CheckCircle, Clock, AlertTriangle, Layers } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { TrendingUp, CheckCircle, Clock, Layers, Github, GitPullRequest, GitCommit, GitMerge, Link2 } from 'lucide-react';
+import { cn, getInitials } from '@/lib/utils';
 
 const STATUS_COLORS: Record<string, string> = {
   backlog: '#9ca3af',
@@ -30,6 +31,16 @@ const TYPE_COLORS: Record<string, string> = {
   story: '#10b981',
   epic: '#8b5cf6',
 };
+
+const PR_COLORS: Record<string, string> = {
+  Open: '#3b82f6',
+  Merged: '#10b981',
+  Closed: '#9ca3af',
+};
+
+function dayLabel(date: string) {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 function HealthRing({ score }: { score: number }) {
   const color = score >= 80 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444';
@@ -126,6 +137,8 @@ export default function AnalyticsPage() {
           color="purple"
         />
       </div>
+
+      <GitHubSection projectId={projectId} github={data.github} />
 
       {/* Health + Status breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -232,12 +245,163 @@ export default function AnalyticsPage() {
   );
 }
 
+function GitHubSection({ projectId, github }: { projectId: string; github?: any }) {
+  if (!github?.repo_count) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-5 flex items-start gap-3">
+        <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+          <Github size={18} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-gray-800">GitHub activity</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Attach a repository in Development to see commits, pull requests, and linked PRs here.
+          </p>
+          <Link href={`/projects/${projectId}/development/repositories`} className="inline-block mt-2 text-sm font-medium text-indigo-600 hover:underline">
+            Open repositories
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const commitData = ((github.commits_by_day as Array<{ date: string; count: number }>) ?? []).map((d) => ({
+    ...d,
+    label: dayLabel(d.date),
+  }));
+  const mergedData = ((github.prs_merged_by_day as Array<{ date: string; count: number }>) ?? []).map((d) => ({
+    ...d,
+    label: dayLabel(d.date),
+  }));
+  const hasCommits = commitData.some((d) => d.count > 0);
+  const hasMerged = mergedData.some((d) => d.count > 0);
+  const prStateData = ((github.prs_by_state as Array<{ name: string; value: number }>) ?? [])
+    .filter((d) => d.value > 0)
+    .map((d) => ({ ...d, color: PR_COLORS[d.name] ?? '#9ca3af' }));
+  const contributors = (github.contributors as any[]) ?? [];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+            <Github size={16} /> GitHub
+          </h3>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {github.repo_count} attached repo{github.repo_count === 1 ? '' : 's'}
+            {github.issues_with_prs ? ` · ${github.issues_with_prs} issue${github.issues_with_prs === 1 ? '' : 's'} with a linked PR` : ''}
+          </p>
+        </div>
+        <Link href={`/projects/${projectId}/development`} className="text-xs font-medium text-indigo-600 hover:underline">
+          View development
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <KpiCard icon={<GitPullRequest size={18} />} label="Open PRs" value={github.open_prs} color="slate" />
+        <KpiCard icon={<GitMerge size={18} />} label="Merged (30d)" value={github.merged_prs_30d} color="green" />
+        <KpiCard icon={<GitCommit size={18} />} label="Commits (14d)" value={github.commits_14d} color="slate" />
+        <KpiCard icon={<Link2 size={18} />} label="Linked PRs" value={github.linked_prs} color="purple" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-sm font-semibold text-gray-700 mb-4">Commits (14 days)</p>
+          {!hasCommits ? (
+            <EmptyChart message="No commits on attached repos in the last 14 days." />
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={commitData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6b7280' }} interval={2} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6b7280' }} width={28} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
+                <Bar dataKey="count" name="Commits" fill="#0f172a" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-sm font-semibold text-gray-700 mb-4">Pull requests</p>
+          {prStateData.length === 0 ? (
+            <EmptyChart message="No pull requests synced yet." />
+          ) : (
+            <div className="flex items-center gap-4 flex-wrap">
+              <PieChart width={160} height={160}>
+                <Pie data={prStateData} cx={75} cy={75} innerRadius={42} outerRadius={70} dataKey="value" paddingAngle={3}>
+                  {prStateData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                </Pie>
+              </PieChart>
+              <div className="flex flex-col gap-2">
+                {prStateData.map((d) => (
+                  <div key={d.name} className="flex items-center gap-2 text-sm">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                    <span className="text-gray-600">{d.name}</span>
+                    <span className="font-semibold text-gray-900 ml-auto pl-4">{d.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-sm font-semibold text-gray-700 mb-4">PRs merged (14 days)</p>
+          {!hasMerged ? (
+            <EmptyChart message="No merges in the last 14 days." />
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={mergedData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6b7280' }} interval={2} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6b7280' }} width={28} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
+                <Bar dataKey="count" name="Merged" fill="#10b981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-sm font-semibold text-gray-700 mb-4">Top contributors</p>
+          {contributors.length === 0 ? (
+            <EmptyChart message="No commit authors on attached repos yet." />
+          ) : (
+            <div className="space-y-2">
+              {contributors.map((person) => (
+                <div key={person.login} className="flex items-center gap-3">
+                  {person.avatar_url ? (
+                    <img src={person.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-slate-800 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                      {getInitials(person.name || person.login)}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-800 truncate">{person.name}</p>
+                    <p className="text-[11px] text-gray-400">@{person.login}</p>
+                  </div>
+                  <p className="text-xs text-gray-500 shrink-0">{person.commit_count} commits · {person.pr_count} PRs</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function KpiCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number; color: string }) {
   const styles: Record<string, string> = {
     blue: 'bg-blue-50 text-blue-600',
     green: 'bg-green-50 text-green-600',
     amber: 'bg-amber-50 text-amber-600',
     purple: 'bg-purple-50 text-purple-600',
+    slate: 'bg-slate-100 text-slate-700',
   };
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">

@@ -284,9 +284,10 @@ export class ProjectsService {
   }
 
   async analytics(id: string) {
-    const [issues, sprints] = await Promise.all([
+    const [issues, sprints, github] = await Promise.all([
       this.knex('issues').where({ project_id: id }).select('status', 'story_points', 'priority', 'type', 'sprint_id', 'created_at'),
       this.knex('sprints').where({ project_id: id }).orderBy('created_at', 'asc'),
+      this.githubAnalytics(id),
     ]);
 
     // Issue breakdown by status
@@ -340,6 +341,153 @@ export class ProjectsService {
       velocity,
       health,
       sprintCount: sprints.length,
+      github,
+    };
+  }
+
+  private async githubAnalytics(projectId: string) {
+    const emptyDays = fillDays(14);
+    const repoIds: string[] = await this.knex('project_github_repositories')
+      .where('project_id', projectId)
+      .pluck('github_repository_id');
+
+    let linked_prs = 0;
+    let issues_with_prs = 0;
+    if (await this.knex.schema.hasTable('github_pr_links')) {
+      const linked = await this.knex('github_pr_links as l')
+        .join('issues as i', 'i.id', 'l.issue_id')
+        .where('i.project_id', projectId)
+        .whereNull('i.deleted_at')
+        .select(
+          this.knex.raw('COUNT(DISTINCT l.pull_request_id) as prs'),
+          this.knex.raw('COUNT(DISTINCT l.issue_id) as issues'),
+        )
+        .first();
+      linked_prs = Number((linked as any)?.prs ?? 0);
+      issues_with_prs = Number((linked as any)?.issues ?? 0);
+    }
+
+    if (!repoIds.length) {
+      return {
+        repo_count: 0,
+        open_prs: 0,
+        merged_prs_30d: 0,
+        commits_14d: 0,
+        linked_prs,
+        issues_with_prs,
+        commits_by_day: emptyDays,
+        prs_merged_by_day: emptyDays,
+        prs_by_state: [
+          { name: 'Open', value: 0 },
+          { name: 'Merged', value: 0 },
+          { name: 'Closed', value: 0 },
+        ],
+        contributors: [],
+      };
+    }
+
+    const since14 = new Date();
+    since14.setHours(0, 0, 0, 0);
+    since14.setDate(since14.getDate() - 13);
+    const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const [openPrs, mergedPrs, commitDays, mergedDays, prStates, mergedAll, commitAuthors, prAuthors] = await Promise.all([
+      this.knex('github_pull_requests').whereIn('github_repository_id', repoIds).andWhere('state', 'open').count('* as c').first(),
+      this.knex('github_pull_requests').whereIn('github_repository_id', repoIds).where('merged', true).where('merged_at', '>=', since30).count('* as c').first(),
+      this.knex('github_commits')
+        .whereIn('github_repository_id', repoIds)
+        .where('committed_at', '>=', since14)
+        .select(this.knex.raw('DATE(committed_at) as day'))
+        .count('* as c')
+        .groupByRaw('DATE(committed_at)'),
+      this.knex('github_pull_requests')
+        .whereIn('github_repository_id', repoIds)
+        .where('merged', true)
+        .where('merged_at', '>=', since14)
+        .select(this.knex.raw('DATE(merged_at) as day'))
+        .count('* as c')
+        .groupByRaw('DATE(merged_at)'),
+      this.knex('github_pull_requests')
+        .whereIn('github_repository_id', repoIds)
+        .select('state', 'merged')
+        .count('* as c')
+        .groupBy('state', 'merged'),
+      this.knex('github_pull_requests').whereIn('github_repository_id', repoIds).where('merged', true).count('* as c').first(),
+      this.knex('github_commits')
+        .whereIn('github_repository_id', repoIds)
+        .whereNotNull('author_login')
+        .groupBy('author_github_user_id', 'author_login')
+        .select('author_github_user_id as github_user_id', 'author_login as login')
+        .count('* as commit_count')
+        .orderBy('commit_count', 'desc')
+        .limit(8),
+      this.knex('github_pull_requests')
+        .whereIn('github_repository_id', repoIds)
+        .whereNotNull('author_login')
+        .groupBy('github_author_id', 'author_login')
+        .select('github_author_id as github_user_id', 'author_login as login')
+        .count('* as pr_count'),
+    ]);
+
+    const commits_by_day = emptyDays.map((d) => {
+      const row = (commitDays as any[]).find((r) => String(r.day).slice(0, 10) === d.date);
+      return { date: d.date, count: Number(row?.c ?? 0) };
+    });
+    const prs_merged_by_day = emptyDays.map((d) => {
+      const row = (mergedDays as any[]).find((r) => String(r.day).slice(0, 10) === d.date);
+      return { date: d.date, count: Number(row?.c ?? 0) };
+    });
+
+    let openCount = 0;
+    let closedCount = 0;
+    for (const row of prStates as any[]) {
+      const n = Number(row.c ?? 0);
+      if (row.state === 'open') openCount += n;
+      else closedCount += n;
+    }
+    const mergedCount = Number((mergedAll as any)?.c ?? 0);
+
+    const prByLogin = new Map((prAuthors as any[]).map((r) => [r.login, Number(r.pr_count ?? 0)]));
+    const contributors = (commitAuthors as any[]).map((row) => ({
+      login: row.login,
+      github_user_id: row.github_user_id != null ? String(row.github_user_id) : null,
+      commit_count: Number(row.commit_count ?? 0),
+      pr_count: prByLogin.get(row.login) ?? 0,
+      name: `@${row.login}`,
+      avatar_url: null as string | null,
+    }));
+
+    const ghIds = contributors.map((c) => c.github_user_id).filter(Boolean) as string[];
+    const accounts = ghIds.length
+      ? await this.knex('user_github_accounts as a')
+          .join('users as u', 'u.id', 'a.user_id')
+          .whereIn('a.github_user_id', ghIds)
+          .select('a.github_user_id', 'u.first_name', 'u.last_name', 'u.avatar_url')
+      : [];
+    const byGhId = new Map(accounts.map((a) => [String(a.github_user_id), a]));
+    for (const person of contributors) {
+      const mapped = person.github_user_id ? byGhId.get(person.github_user_id) : null;
+      if (mapped) {
+        person.name = `${mapped.first_name} ${mapped.last_name}`;
+        person.avatar_url = mapped.avatar_url ?? null;
+      }
+    }
+
+    return {
+      repo_count: repoIds.length,
+      open_prs: Number((openPrs as any)?.c ?? 0),
+      merged_prs_30d: Number((mergedPrs as any)?.c ?? 0),
+      commits_14d: commits_by_day.reduce((sum, d) => sum + d.count, 0),
+      linked_prs,
+      issues_with_prs,
+      commits_by_day,
+      prs_merged_by_day,
+      prs_by_state: [
+        { name: 'Open', value: openCount },
+        { name: 'Merged', value: mergedCount },
+        { name: 'Closed', value: Math.max(0, closedCount - mergedCount) },
+      ],
+      contributors,
     };
   }
 }

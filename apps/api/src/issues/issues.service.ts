@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
