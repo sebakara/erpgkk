@@ -61,13 +61,20 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
 
         {activeSprint && (
           <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3 flex items-center justify-between mb-4">
-            <div>
-              <p className="text-xs text-indigo-500 font-medium uppercase tracking-wide">Active Sprint</p>
-              <p className="text-indigo-900 font-semibold text-sm">{activeSprint.name}</p>
+            <div className="min-w-0">
+              <p className="text-xs text-indigo-500 font-medium uppercase tracking-wide">Active cycle</p>
+              <p className="text-indigo-900 font-semibold text-sm truncate">{activeSprint.name}</p>
+              {activeSprint.start_date && activeSprint.end_date && (
+                <p className="text-xs text-indigo-400 mt-0.5">
+                  {new Date(activeSprint.start_date).toLocaleDateString()} → {new Date(activeSprint.end_date).toLocaleDateString()}
+                </p>
+              )}
             </div>
-            <Link href={`/projects/${id}/board`} className="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-indigo-700">
-              Open Board
-            </Link>
+            {!pathname.includes('/board') && (
+              <Link href={`/projects/${id}/board`} className="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-indigo-700 shrink-0">
+                Open Board
+              </Link>
+            )}
           </div>
         )}
 

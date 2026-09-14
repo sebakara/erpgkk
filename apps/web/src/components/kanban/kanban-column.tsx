@@ -1,60 +1,161 @@
 'use client';
+import { useEffect, useRef, useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Plus } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, X } from 'lucide-react';
+import { issuesApi } from '@/lib/api';
 import { IssueCard } from './issue-card';
 import { cn } from '@/lib/utils';
-import type { Issue, IssueStatus } from '@/types';
+import toast from 'react-hot-toast';
+import type { Issue, IssueStatus, ProjectMember } from '@/types';
 
 interface Column { key: IssueStatus; label: string; color: string; issues: Issue[] }
 
 interface Props {
   column: Column;
   projectId: string;
-  isDragTarget?: boolean;  // true when this column is the current drag destination
-  onAddIssue: (status: IssueStatus) => void;
+  sprintId?: string;
+  isDragTarget?: boolean;
   onCardClick: (issue: Issue) => void;
+  members: ProjectMember[];
+  canAssign: boolean;
+  onIssuePatch?: (issueId: string, patch: Partial<Issue>) => void;
 }
 
-export function KanbanColumn({ column, projectId: _projectId, isDragTarget, onAddIssue, onCardClick }: Props) {
+export function KanbanColumn({ column, projectId, sprintId, isDragTarget, onCardClick, members, canAssign, onIssuePatch }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: column.key });
+  const [adding, setAdding] = useState(false);
 
   return (
-    <div
+    <section
       className={cn(
-        'flex flex-col w-72 shrink-0 rounded-xl bg-gray-100 border border-gray-200 transition-colors',
-        (isOver || isDragTarget) && 'bg-indigo-50 border-indigo-200',
+        'flex flex-col w-[280px] shrink-0 rounded-2xl h-full max-h-full',
+        (isOver || isDragTarget) ? 'bg-[#e6f0ff]' : 'bg-[#eceae8]',
       )}
     >
-      <div className="px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full" style={{ background: column.color }} />
-          <span className="text-sm font-semibold text-gray-700">{column.label}</span>
-          <span className="text-xs text-gray-400 bg-white px-1.5 py-0.5 rounded-full border border-gray-200">
-            {column.issues.length}
-          </span>
-        </div>
+      <header className="flex items-center gap-2 px-3 pt-3 pb-2">
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: column.color }} />
+        <h2 className="text-[15px] font-semibold text-gray-800 truncate">{column.label}</h2>
+        <span className="text-xs text-gray-500">{column.issues.length}</span>
         <button
-          onClick={() => onAddIssue(column.key)}
-          className="p-1 hover:bg-gray-200 rounded-md transition-colors text-gray-400 hover:text-gray-600"
-          title={`Add issue to ${column.label}`}
+          type="button"
+          onClick={() => setAdding(true)}
+          className="ml-auto p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-black/5"
+          title={`Add task to ${column.label}`}
         >
-          <Plus size={15} />
+          <Plus size={16} />
         </button>
-      </div>
+      </header>
 
       <SortableContext items={column.issues.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-        <div ref={setNodeRef} className="flex-1 flex flex-col gap-2 px-2 pb-2 min-h-[100px]">
+        <div ref={setNodeRef} className="flex-1 overflow-y-auto px-2 pb-1 space-y-2 min-h-[80px]">
           {column.issues.map((issue) => (
-            <IssueCard key={issue.id} issue={issue} onCardClick={onCardClick} />
+            <IssueCard
+              key={issue.id}
+              issue={issue}
+              onCardClick={onCardClick}
+              members={members}
+              projectId={projectId}
+              canAssign={canAssign}
+              onIssuePatch={onIssuePatch}
+            />
           ))}
-          {column.issues.length === 0 && (
-            <div className="flex-1 flex items-center justify-center py-8">
-              <p className="text-xs text-gray-400">Drop here</p>
-            </div>
-          )}
         </div>
       </SortableContext>
+
+      <div className="px-2 pb-2 pt-1">
+        {adding ? (
+          <InlineAddTask
+            projectId={projectId}
+            sprintId={sprintId}
+            status={column.key}
+            onClose={() => setAdding(false)}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[13px] text-gray-500 hover:text-gray-800 hover:bg-black/5 rounded-lg"
+          >
+            <Plus size={14} /> Add task
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function InlineAddTask({
+  projectId,
+  sprintId,
+  status,
+  onClose,
+}: {
+  projectId: string;
+  sprintId?: string;
+  status: IssueStatus;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const [title, setTitle] = useState('');
+
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+
+  const create = useMutation({
+    mutationFn: () =>
+      issuesApi.create(projectId, {
+        title: title.trim(),
+        type: 'task',
+        status,
+        sprint_id: sprintId || undefined,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['issues', projectId] });
+      setTitle('');
+      ref.current?.focus();
+    },
+    onError: () => toast.error('Could not add task'),
+  });
+
+  const submit = () => {
+    if (!title.trim() || create.isPending) return;
+    create.mutate();
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.08)] p-2">
+      <textarea
+        ref={ref}
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            submit();
+          }
+          if (e.key === 'Escape') onClose();
+        }}
+        placeholder="Task name"
+        rows={2}
+        className="w-full resize-none text-[13px] text-gray-900 placeholder:text-gray-400 focus:outline-none"
+      />
+      <div className="flex items-center gap-2 mt-1">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!title.trim() || create.isPending}
+          className="px-3 py-1 text-[13px] font-semibold text-white bg-[#4573d2] hover:bg-[#3d68c5] rounded-md disabled:opacity-50"
+        >
+          {create.isPending ? 'Adding…' : 'Add task'}
+        </button>
+        <button type="button" onClick={onClose} className="p-1 text-gray-400 hover:text-gray-700">
+          <X size={16} />
+        </button>
+      </div>
     </div>
   );
 }

@@ -12,14 +12,24 @@ export class SprintsController {
     return this.sprintsService.findAll(projectId);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.sprintsService.findById(id);
-  }
-
   @Get(':id/stats')
   stats(@Param('id') id: string) {
     return this.sprintsService.stats(id);
+  }
+
+  @Post(':id/start')
+  start(@Param('projectId') projectId: string, @Param('id') id: string) {
+    return this.sprintsService.start(projectId, id);
+  }
+
+  @Post(':id/complete')
+  complete(@Param('projectId') projectId: string, @Param('id') id: string) {
+    return this.sprintsService.complete(projectId, id);
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.sprintsService.findById(id);
   }
 
   @Post()

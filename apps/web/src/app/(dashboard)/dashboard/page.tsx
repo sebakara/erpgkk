@@ -4,8 +4,8 @@ import { projectsApi, hrApi, leavePackagesApi, githubApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate, cn } from '@/lib/utils';
 import {
-  FolderOpen, Calendar, GitPullRequest, GitCommit, Github, Clock, Circle, CheckCircle2,
-  GitBranch, Layers,
+  FolderOpen, Calendar, GitPullRequest, Github, Clock, Circle, CheckCircle2,
+  GitBranch, Layers, AlertTriangle,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -128,14 +128,14 @@ export default function DashboardPage() {
     ? [
         { label: 'In Progress', value: overview.mine.inProgress, icon: Clock, color: 'bg-amber-500' },
         { label: 'To Do', value: overview.mine.todo, icon: Circle, color: 'bg-blue-500' },
-        { label: 'Open GitHub PRs', value: github?.open_prs ?? 0, icon: GitPullRequest, color: 'bg-slate-800' },
-        { label: 'Leave pending', value: leavePending, icon: Calendar, color: 'bg-rose-500' },
+        { label: 'Overdue', value: overview.mine.overdue ?? 0, icon: AlertTriangle, color: 'bg-rose-500' },
+        { label: 'Leave pending', value: leavePending, icon: Calendar, color: 'bg-orange-500' },
       ]
     : [
         { label: 'Projects', value: overview.projects.total, icon: FolderOpen, color: 'bg-indigo-500' },
         { label: 'Open issues', value: overview.issues.open, icon: Layers, color: 'bg-blue-500' },
+        { label: 'Overdue', value: overview.issues.overdue ?? 0, icon: AlertTriangle, color: 'bg-rose-500' },
         { label: 'Open GitHub PRs', value: github?.open_prs ?? 0, icon: GitPullRequest, color: 'bg-slate-800' },
-        { label: 'Merged (30d)', value: github?.merged_prs_30d ?? 0, icon: GitCommit, color: 'bg-green-600' },
       ];
 
   return (
@@ -320,23 +320,25 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {isEmployee ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <h2 className="font-semibold text-gray-900 mb-4">My open tasks</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-gray-900">My work</h2>
+              <Link href="/my-work" className="text-xs text-indigo-600 font-medium hover:underline">View all</Link>
+            </div>
             {(overview.mine_issues as any[]).length === 0 ? (
               <p className="text-gray-400 text-sm">No open tasks assigned to you</p>
             ) : (
               <div className="space-y-1">
-                {(overview.mine_issues as any[]).map((issue) => {
+                {(overview.mine_issues as any[]).slice(0, 8).map((issue) => {
                   const Icon = STATUS_ICON[issue.status] ?? Circle;
-                  const project = (overview.byProject as any[]).find((p) => p.id === issue.project_id);
                   return (
                     <Link
                       key={issue.id}
-                      href={`/projects/${issue.project_id}/issues`}
+                      href={`/projects/${issue.project_id}/board`}
                       className="flex items-center gap-3 px-2 py-2.5 rounded-lg hover:bg-gray-50 transition-colors"
                     >
                       <Icon size={14} className={cn('shrink-0', STATUS_COLOR[issue.status])} />
                       <span className="flex-1 text-sm text-gray-800 truncate">{issue.title}</span>
-                      {project && <span className="text-xs text-gray-400 shrink-0 hidden sm:block">{project.name}</span>}
+                      {issue.project_name && <span className="text-xs text-gray-400 shrink-0 hidden sm:block">{issue.project_name}</span>}
                       <span className={cn(
                         'text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize shrink-0',
                         issue.priority === 'urgent' ? 'bg-red-100 text-red-700'
@@ -364,13 +366,17 @@ export default function DashboardPage() {
                 {(overview.byProject as any[]).slice(0, 8).map((p) => (
                   <Link
                     key={p.id}
-                    href={p.github_repos ? `/projects/${p.id}/development` : `/projects/${p.id}`}
+                    href={`/projects/${p.id}/board`}
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     <span className="text-xl">{p.icon || '📁'}</span>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900 truncate">{p.name}</p>
-                      <p className="text-xs text-gray-500">{p.done}/{p.total || 0} done · {p.health}% health</p>
+                      <p className="text-xs text-gray-500">
+                        {p.done}/{p.total || 0} done · {p.health}% health
+                        {p.active_sprint ? ` · ${p.active_sprint.name}` : ''}
+                        {p.overdue > 0 ? ` · ${p.overdue} overdue` : ''}
+                      </p>
                     </div>
                     {p.github_repos > 0 ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">

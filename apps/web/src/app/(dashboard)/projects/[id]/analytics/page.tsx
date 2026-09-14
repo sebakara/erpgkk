@@ -182,6 +182,16 @@ export default function AnalyticsPage() {
             </BarChart>
           </ResponsiveContainer>
         )}
+        {velocity.length > 0 && (
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {velocity.map((row: any) => (
+              <div key={row.sprint} className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                <span className="font-medium text-gray-800 truncate">{row.sprint}</span>
+                <span className="ml-auto shrink-0">{row.issues_done ?? 0}/{row.issues_total ?? 0} · {row.pct ?? 0}%</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Priority + Type breakdown */}

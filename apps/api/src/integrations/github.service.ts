@@ -15,6 +15,7 @@ import { KNEX_CONNECTION } from '../database/database.module';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { ChatService } from '../chat/chat.service';
 import { canManageAllProjects } from '../common/access/engineering';
+import { userManagesProject } from '../common/access/projects';
 import { NotificationEventType, Role } from '../common/enums';
 import { GitHubAppClient } from './github-app.client';
 import { GitHubSyncService } from './github-sync.service';
@@ -839,6 +840,13 @@ export class GitHubService {
     if (member) return project;
     const assigned = await this.knex('issues').where({ project_id: projectId, assignee_id: user.id }).first();
     if (assigned) return project;
+    const coassigned = await this.knex('issue_assignees as ia')
+      .join('issues as i', 'i.id', 'ia.issue_id')
+      .where('i.project_id', projectId)
+      .whereNull('i.deleted_at')
+      .andWhere('ia.user_id', user.id)
+      .first();
+    if (coassigned) return project;
     throw new ForbiddenException('You do not have access to this project');
   }
 
@@ -848,12 +856,13 @@ export class GitHubService {
       throw new ForbiddenException('HR cannot attach GitHub repositories');
     }
     if (user.role === Role.Admin || user.role === Role.Manager) return project;
+    if (user.role === Role.ProjectManager && await userManagesProject(this.knex, projectId, user.id)) return project;
     if (await canManageAllProjects(this.knex, user.company_id, user.id, user.role)) return project;
     const owner = await this.knex('project_members')
       .where({ project_id: projectId, user_id: user.id, role: 'owner' })
       .first();
     if (owner || project.owner_id === user.id) return project;
-    throw new ForbiddenException('Only admins, managers, or the project owner can change GitHub repositories');
+    throw new ForbiddenException('Only admins, managers, project managers, or the project owner can change GitHub repositories');
   }
 
   private assertCanMapUser(actor: any, target: any) {
@@ -880,6 +889,13 @@ export class GitHubService {
           this.knex('issues as i')
             .whereRaw('i.project_id = p.id')
             .where('i.assignee_id', user.id),
+        )
+        .orWhereExists(
+          this.knex('issue_assignees as ia')
+            .join('issues as i', 'i.id', 'ia.issue_id')
+            .whereRaw('i.project_id = p.id')
+            .whereNull('i.deleted_at')
+            .andWhere('ia.user_id', user.id),
         );
     });
   }

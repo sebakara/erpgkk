@@ -10,6 +10,7 @@ import { Role } from '../src/common/enums';
 import { verifyGitHubSignature } from '../src/integrations/github-webhooks/verify';
 import { claimDelivery } from '../src/integrations/github-webhooks/process';
 import { mapIssue, mapPullRequest, mapRepository } from '../src/integrations/github-mappers';
+import { textMentionsIssueId } from '../src/integrations/github-pr-links';
 import { GitHubService } from '../src/integrations/github.service';
 import { parseEnvFile } from '../src/load-env';
 
@@ -80,6 +81,13 @@ test('mappers keep GitHub numeric ids as strings and skip PR-shaped issues', () 
     pull_request: { url: 'https://api.github.com/repos/gkk/ops/pulls/8' },
   });
   assert.equal(issue.is_pull_request, true);
+});
+
+test('PR text matches an issue UUID with or without hyphens', () => {
+  const id = '6ccd780c-aabb-11e4-9b6c-761b0c1e7001';
+  assert.equal(textMentionsIssueId(`Fixes ${id} login`, id), true);
+  assert.equal(textMentionsIssueId(`fix/${id.replace(/-/g, '')}`, id), true);
+  assert.equal(textMentionsIssueId('unrelated branch', id), false);
 });
 
 function createDatabase() {

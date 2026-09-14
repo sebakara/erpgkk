@@ -85,7 +85,7 @@ export default function FolderPage() {
     Array.from(list).forEach((f) => uploadMutation.mutate(f));
   };
 
-  const canDelete = user?.role === 'admin' || user?.role === 'manager';
+  const canDelete = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'project_manager';
 
   return (
     <div className="space-y-4">

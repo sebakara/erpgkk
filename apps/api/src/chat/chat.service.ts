@@ -337,6 +337,13 @@ export class ChatService {
     if (member) return true;
     const assigned = await this.knex('issues').where({ project_id: projectId, assignee_id: userId }).first();
     if (assigned) return true;
+    const coassigned = await this.knex('issue_assignees as ia')
+      .join('issues as i', 'i.id', 'ia.issue_id')
+      .where('i.project_id', projectId)
+      .whereNull('i.deleted_at')
+      .andWhere('ia.user_id', userId)
+      .first();
+    if (coassigned) return true;
     const project = await this.knex('projects').where({ id: projectId }).first();
     if (!project?.department_id) return false;
     const head = await this.knex('departments').where({ id: project.department_id, manager_id: userId }).first();
@@ -367,6 +374,12 @@ export class ChatService {
           this.knex('project_members as pm').whereRaw('pm.project_id = p.id').andWhere('pm.user_id', userId),
         ).orWhereExists(
           this.knex('issues as i').whereRaw('i.project_id = p.id').andWhere('i.assignee_id', userId),
+        ).orWhereExists(
+          this.knex('issue_assignees as ia')
+            .join('issues as i', 'i.id', 'ia.issue_id')
+            .whereRaw('i.project_id = p.id')
+            .whereNull('i.deleted_at')
+            .andWhere('ia.user_id', userId),
         );
         if (managedDepts.length) b.orWhereIn('p.department_id', managedDepts);
       })
@@ -393,8 +406,13 @@ export class ChatService {
     if (conv.type === 'project' && conv.project_id) {
       const members = await this.knex('project_members').where('project_id', conv.project_id).pluck('user_id');
       const assignees = await this.knex('issues').where('project_id', conv.project_id).whereNotNull('assignee_id').pluck('assignee_id');
+      const extra = await this.knex('issue_assignees as ia')
+        .join('issues as i', 'i.id', 'ia.issue_id')
+        .where('i.project_id', conv.project_id)
+        .whereNull('i.deleted_at')
+        .pluck('ia.user_id');
       const admins = await this.knex('users').where({ company_id: conv.company_id, role: 'admin', is_active: true }).pluck('id');
-      return [...new Set([...members, ...assignees, ...admins])];
+      return [...new Set([...members, ...assignees, ...extra, ...admins])];
     }
     return [];
   }

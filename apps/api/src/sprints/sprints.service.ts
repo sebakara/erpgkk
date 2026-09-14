@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
 import { v4 as uuid } from 'uuid';
@@ -28,8 +28,61 @@ export class SprintsService {
     return this.findById(id);
   }
 
+  async start(projectId: string, id: string) {
+    const sprint = await this.findById(id);
+    if (sprint.project_id !== projectId) throw new NotFoundException('Sprint not found');
+    if (sprint.status === 'completed') throw new BadRequestException('Cannot start a completed sprint');
+    if (sprint.status === 'active') return sprint;
+
+    const active = await this.knex('sprints')
+      .where({ project_id: projectId, status: 'active' })
+      .whereNull('deleted_at')
+      .first();
+    if (active && active.id !== id) {
+      throw new BadRequestException(`Complete “${active.name}” before starting another sprint`);
+    }
+
+    await this.knex('sprints').where({ id }).update({ status: 'active', updated_at: new Date() });
+    return this.findById(id);
+  }
+
+  async complete(projectId: string, id: string) {
+    const sprint = await this.findById(id);
+    if (sprint.project_id !== projectId) throw new NotFoundException('Sprint not found');
+    if (sprint.status === 'completed') return { sprint, rolled: 0, rolledTo: null };
+
+    const leftoverIds = await this.knex('issues')
+      .where({ sprint_id: id })
+      .whereNull('deleted_at')
+      .whereNot('status', 'done')
+      .pluck('id');
+
+    const next = await this.knex('sprints')
+      .where({ project_id: projectId, status: 'planning' })
+      .whereNull('deleted_at')
+      .whereNot('id', id)
+      .orderBy('created_at', 'asc')
+      .first();
+
+    await this.knex.transaction(async (trx) => {
+      if (leftoverIds.length) {
+        await trx('issues').whereIn('id', leftoverIds).update({
+          sprint_id: next?.id ?? null,
+          updated_at: new Date(),
+        });
+      }
+      await trx('sprints').where({ id }).update({ status: 'completed', updated_at: new Date() });
+    });
+
+    return {
+      sprint: await this.findById(id),
+      rolled: leftoverIds.length,
+      rolledTo: next ? { id: next.id, name: next.name } : null,
+    };
+  }
+
   async stats(id: string) {
-    const issues = await this.knex('issues').where({ sprint_id: id }).select('status', 'story_points');
+    const issues = await this.knex('issues').where({ sprint_id: id }).whereNull('deleted_at').select('status', 'story_points');
     const total = issues.length;
     const done = issues.filter((i) => i.status === 'done').length;
     const totalPoints = issues.reduce((s, i) => s + (i.story_points || 0), 0);

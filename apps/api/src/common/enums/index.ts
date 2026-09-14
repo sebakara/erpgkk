@@ -3,6 +3,7 @@ export enum Role {
   Manager = 'manager',
   Employee = 'employee',
   Hr = 'hr',
+  ProjectManager = 'project_manager',
 }
 
 export enum IssueType {

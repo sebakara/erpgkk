@@ -171,7 +171,12 @@ async function handlePullRequest(
 ) {
   const pr = payload.pull_request;
   if (!pr) return;
-  await sync.upsertPullRequest(repo.id, pr);
+  const prId = await sync.upsertPullRequest(repo.id, pr);
+  if (prId) {
+    await sync.autoLinkPullRequest(prId, repo.id, {
+      moveOnMerge: action === 'closed' && !!(pr.merged || pr.merged_at),
+    });
+  }
   if (action === 'review_requested' && payload.requested_reviewer) {
     await github.notifyReviewRequested(repo, pr, payload.requested_reviewer);
   }

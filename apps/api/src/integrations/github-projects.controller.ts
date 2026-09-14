@@ -22,13 +22,13 @@ export class GitHubProjectsController {
   }
 
   @Get('available-repos')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
   available(@Param('id') id: string, @CurrentUser() user: any) {
     return this.github.listAvailableRepos(id, user);
   }
 
   @Post('repos')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
   attach(
     @Param('id') id: string,
     @CurrentUser() user: any,
@@ -38,7 +38,7 @@ export class GitHubProjectsController {
   }
 
   @Patch('repos/:repoId')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
   updateRepo(
     @Param('id') id: string,
     @Param('repoId') repoId: string,
@@ -49,13 +49,13 @@ export class GitHubProjectsController {
   }
 
   @Delete('repos/:repoId')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
   detach(@Param('id') id: string, @Param('repoId') repoId: string, @CurrentUser() user: any) {
     return this.github.detachRepo(id, user, repoId);
   }
 
   @Post('sync')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
   sync(@Param('id') id: string, @CurrentUser() user: any) {
     return this.github.syncProject(id, user);
   }

@@ -27,7 +27,7 @@ export default function ProjectsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
-          <p className="text-gray-500 text-sm mt-1">{projects.length} projects in your workspace</p>
+          <p className="text-gray-500 text-sm mt-1">{projects.length} project{projects.length === 1 ? '' : 's'}</p>
         </div>
         <button onClick={() => setShowNew(true)} className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700">
           <Plus size={16} /> New Project
@@ -45,7 +45,7 @@ export default function ProjectsPage() {
           {projects.map((p: any) => {
             const mapped = (github?.projects ?? []).find((g: any) => g.id === p.id)?.github_repos ?? 0;
             return (
-            <Link key={p.id} href={mapped ? `/projects/${p.id}/development` : `/projects/${p.id}`}
+            <Link key={p.id} href={`/projects/${p.id}/board`}
               className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow group">
               <div className="flex items-start justify-between mb-3">
                 <span className="text-2xl">{p.icon || '📁'}</span>

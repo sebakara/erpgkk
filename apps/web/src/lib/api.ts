@@ -52,6 +52,7 @@ export const projectsApi = {
   update: (id: string, data: any) => api.patch(`/projects/${id}`, data).then((r) => r.data),
   remove: (id: string) => api.delete(`/projects/${id}`).then((r) => r.data),
   addMember: (id: string, data: any) => api.post(`/projects/${id}/members`, data).then((r) => r.data),
+  removeMember: (id: string, userId: string) => api.delete(`/projects/${id}/members/${userId}`).then((r) => r.data),
   analytics: (id: string) => api.get(`/projects/${id}/analytics`).then((r) => r.data),
   overview: () => api.get('/projects/overview').then((r) => r.data),
 };
@@ -63,6 +64,8 @@ export const sprintsApi = {
   stats: (projectId: string, id: string) => api.get(`/projects/${projectId}/sprints/${id}/stats`).then((r) => r.data),
   create: (projectId: string, data: any) => api.post(`/projects/${projectId}/sprints`, data).then((r) => r.data),
   update: (projectId: string, id: string, data: any) => api.patch(`/projects/${projectId}/sprints/${id}`, data).then((r) => r.data),
+  start: (projectId: string, id: string) => api.post(`/projects/${projectId}/sprints/${id}/start`).then((r) => r.data),
+  complete: (projectId: string, id: string) => api.post(`/projects/${projectId}/sprints/${id}/complete`).then((r) => r.data),
 };
 
 // Issues
@@ -79,6 +82,10 @@ export const issuesApi = {
     api.patch(`/projects/${projectId}/issues/${id}/move`, data).then((r) => r.data),
   comment: (projectId: string, id: string, body: string) =>
     api.post(`/projects/${projectId}/issues/${id}/comments`, { body }).then((r) => r.data),
+  linkPullRequest: (projectId: string, id: string, pull_request_id: string) =>
+    api.post(`/projects/${projectId}/issues/${id}/pull-requests`, { pull_request_id }).then((r) => r.data),
+  unlinkPullRequest: (projectId: string, id: string, prId: string) =>
+    api.delete(`/projects/${projectId}/issues/${id}/pull-requests/${prId}`).then((r) => r.data),
 };
 
 // HR

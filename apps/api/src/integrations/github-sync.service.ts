@@ -13,6 +13,7 @@ import {
   mapRelease,
   mapRepository,
 } from './github-mappers';
+import { insertPrLink, textMentionsIssueId } from './github-pr-links';
 
 const SYNC_WINDOW_DAYS = 90;
 const MAX_PRS_PER_REPO = 200;
@@ -306,9 +307,45 @@ export class GitHubSyncService {
       .first();
   }
 
+  async autoLinkPullRequest(pullRequestId: string, repoId: string, opts: { moveOnMerge?: boolean } = {}) {
+    return this.autoLinkPullRequests(repoId, [pullRequestId], opts);
+  }
+
+  async autoLinkPullRequests(repoId: string, pullRequestIds: string[], opts: { moveOnMerge?: boolean } = {}) {
+    const ids = [...new Set(pullRequestIds.filter(Boolean))];
+    if (!ids.length) return;
+    const prs = await this.knex('github_pull_requests').whereIn('id', ids);
+    if (!prs.length) return;
+    const projectIds: string[] = await this.knex('project_github_repositories')
+      .where({ github_repository_id: repoId })
+      .pluck('project_id');
+    const issues = projectIds.length
+      ? await this.knex('issues').whereIn('project_id', projectIds).whereNull('deleted_at').select('id')
+      : [];
+    for (const pr of prs) {
+      const hay = [pr.title, pr.body, pr.source_branch].filter(Boolean).join('\n');
+      for (const issue of issues) {
+        if (textMentionsIssueId(hay, issue.id)) {
+          await insertPrLink(this.knex, issue.id, pr.id);
+        }
+      }
+      if (opts.moveOnMerge && pr.merged) await this.moveLinkedIssuesToReview(pr.id);
+    }
+  }
+
+  private async moveLinkedIssuesToReview(pullRequestId: string) {
+    const issueIds: string[] = await this.knex('github_pr_links').where({ pull_request_id: pullRequestId }).pluck('issue_id');
+    if (!issueIds.length) return;
+    await this.knex('issues')
+      .whereIn('id', issueIds)
+      .whereIn('status', ['in_progress'])
+      .update({ status: 'in_review', updated_at: new Date() });
+  }
+
   private async syncPullRequests(octokit: any, repo: any, since: Date) {
     let count = 0;
     const recentPrs: Array<{ id: string; number: number }> = [];
+    const syncedIds: string[] = [];
 
     for await (const page of octokit.paginate.iterator(octokit.rest.pulls.list, {
       owner: repo.owner,
@@ -325,6 +362,7 @@ export class GitHubSyncService {
           break;
         }
         const id = await this.upsertPullRequest(repo.id, pr);
+        if (id) syncedIds.push(id);
         if (id && recentPrs.length < MAX_REVIEW_PRS_PER_REPO) {
           recentPrs.push({ id, number: pr.number });
         }
@@ -335,6 +373,12 @@ export class GitHubSyncService {
         }
       }
       if (stop) break;
+    }
+
+    try {
+      await this.autoLinkPullRequests(repo.id, syncedIds);
+    } catch (err) {
+      this.logger.warn(`PR auto-link failed for ${repo.full_name}: ${(err as Error).message}`);
     }
 
     for (const pr of recentPrs) {

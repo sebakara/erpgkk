@@ -14,6 +14,7 @@ import { hrApi, usersApi, departmentsApi, performanceApi, leavePackagesApi, chat
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate, cn, getInitials } from '@/lib/utils';
+import { isHrLead, roleLabel } from '@/lib/roles';
 import { desktopNotify } from '@/lib/desktop-notify';
 import toast from 'react-hot-toast';
 import type { LeaveRequest, PerformanceReview, LeavePackage, LeaveBalance } from '@/types';
@@ -30,7 +31,7 @@ const LEAVE_TYPES = ['annual', 'sick', 'emergency', 'unpaid', 'maternity', 'pate
 
 export default function HrPage() {
   const user = useAuthStore((s) => s.user);
-  const isManager = user?.role !== 'employee';
+  const isManager = isHrLead(user?.role);
   const [tab, setTab] = useState<Tab>('overview');
 
   const allTabs: { key: Tab; label: string; icon: React.ReactNode; managerOnly?: boolean }[] = [
@@ -387,7 +388,7 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
 
   // Determine view mode from what the backend returned
   const isSelfOnly = !isManager && (employees as any[]).length === 1 && (employees as any[])[0]?.id === currentUser?.id;
-  const isDeptHead = !isManager && (employees as any[]).length > 0 && !isSelfOnly;
+  const isDeptHead = !isManager && currentUser?.role !== 'project_manager' && (employees as any[]).length > 0 && !isSelfOnly;
 
   const filtered = (employees as any[]).filter((e) => {
     const name = `${e.first_name} ${e.last_name} ${e.email} ${e.job_title ?? ''}`.toLowerCase();
@@ -443,6 +444,7 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
           <option value="all">All Roles</option>
           <option value="admin">Admin</option>
           <option value="manager">Manager</option>
+          <option value="project_manager">Project manager</option>
           <option value="hr">HR</option>
           <option value="employee">Employee</option>
         </select>
@@ -532,6 +534,7 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
                   <select value={addForm.role} onChange={(e) => setAddForm({ ...addForm, role: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none">
                     <option value="employee">Employee</option>
+                    <option value="project_manager">Project manager</option>
                     <option value="manager">Manager</option>
                     <option value="hr">HR</option>
                     <option value="admin">Admin</option>
@@ -580,6 +583,8 @@ function EmployeesTab({ isManager, currentUser }: { isManager: boolean; currentU
 const ROLE_COLOR: Record<string, string> = {
   admin: 'bg-purple-100 text-purple-700',
   manager: 'bg-blue-100 text-blue-700',
+  project_manager: 'bg-indigo-100 text-indigo-700',
+  hr: 'bg-teal-100 text-teal-700',
   employee: 'bg-gray-100 text-gray-600',
 };
 
@@ -618,8 +623,8 @@ function EmployeeCard({ emp, isManager, isDeptHead, onView }: { emp: any; isMana
             </p>
           )}
         </div>
-        <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize shrink-0', ROLE_COLOR[emp.role])}>
-          {emp.role}
+        <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0', ROLE_COLOR[emp.role])}>
+          {roleLabel(emp.role)}
         </span>
       </div>
       <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
@@ -723,7 +728,7 @@ function EmployeeProfileDrawer({ emp, isManager, currentUser, onClose }: { emp: 
               <h2 className="text-xl font-bold text-white truncate">{p.first_name} {p.last_name}</h2>
               <p className="text-indigo-200 text-sm">{p.job_title ?? 'No title'}</p>
               <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full capitalize', ROLE_COLOR[p.role])}>{p.role}</span>
+                <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', ROLE_COLOR[p.role])}>{roleLabel(p.role)}</span>
                 {p.department_name && <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full">{p.department_name}</span>}
                 {!p.is_active && <span className="text-[10px] bg-red-400/80 text-white px-2 py-0.5 rounded-full">Inactive</span>}
               </div>
@@ -1156,7 +1161,7 @@ function StarRow({ score, size = 14 }: { score: number; size?: number }) {
 
 function PerformanceTab({ user }: { user: any }) {
   const qc = useQueryClient();
-  const isManager = user?.role !== 'employee';
+  const isManager = isHrLead(user?.role);
 
   /* filters */
   const [employeeFilter, setEmployeeFilter] = useState('');

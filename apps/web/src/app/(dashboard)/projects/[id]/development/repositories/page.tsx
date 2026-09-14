@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink, Plus, Trash2, RefreshCw } from 'lucide-react';
 import { githubApi, projectsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
+import { canManageProjects } from '@/lib/roles';
 import toast from 'react-hot-toast';
 import { useState } from 'react';
 import { DevSpinner, Empty } from '../ui';
@@ -17,7 +18,8 @@ export default function DevelopmentReposPage() {
     queryKey: ['project', id],
     queryFn: () => projectsApi.get(id),
   });
-  const canManage = user?.role === 'admin' || user?.role === 'manager' || project?.owner_id === user?.id;
+  const myRole = project?.members?.find((m: any) => m.id === user?.id)?.role;
+  const canManage = canManageProjects(user?.role, project?.owner_id, user?.id, myRole);
 
   const { data: repos = [], isLoading } = useQuery({
     queryKey: ['github-project-repos', id],

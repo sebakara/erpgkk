@@ -9,7 +9,9 @@ import {
 } from 'lucide-react';
 import { issuesApi, sprintsApi, usersApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
-import { cn, getInitials, formatDate } from '@/lib/utils';
+import { cn, getInitials, formatDate, assigneesOf, issueHasAssignee } from '@/lib/utils';
+import { AssigneePicker } from '@/components/kanban/assignee-picker';
+import { canManageProjects } from '@/lib/roles';
 import toast from 'react-hot-toast';
 import type { Issue, Sprint } from '@/types';
 
@@ -107,7 +109,7 @@ export default function IssuesPage() {
       if (statusFilter === 'closed' && open) return false;
       if (typeFilter !== 'all' && i.type !== typeFilter) return false;
       if (prioFilter !== 'all' && i.priority !== prioFilter) return false;
-      if (assigneeFilter !== 'all' && i.assignee_id !== assigneeFilter) return false;
+      if (assigneeFilter !== 'all' && !issueHasAssignee(i, assigneeFilter)) return false;
       if (labelFilter !== 'all' && i.label !== labelFilter) return false;
       if (sprintFilter !== 'all' && i.sprint_id !== sprintFilter) return false;
       if (search && !i.title.toLowerCase().includes(search.toLowerCase())) return false;
@@ -344,9 +346,17 @@ function IssueRow({ issue, sprints, projectId, isSelected, onClick }: {
 
       {/* Right meta */}
       <div className="flex items-center gap-2 shrink-0">
-        {issue.assignee_id && (
-          <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-bold flex items-center justify-center" title={issue.assignee_name ?? ''}>
-            {getInitials(issue.assignee_name ?? '?')}
+        {assigneesOf(issue).length > 0 && (
+          <div className="flex items-center -space-x-1.5">
+            {assigneesOf(issue).slice(0, 3).map((person) => (
+              <div
+                key={person.id}
+                className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-bold flex items-center justify-center ring-2 ring-white"
+                title={person.name}
+              >
+                {getInitials(person.name)}
+              </div>
+            ))}
           </div>
         )}
         <button
@@ -372,7 +382,7 @@ function IssueDetailPanel({ issue, projectId, sprints, members, currentUser, onC
   const makeEditForm = (i: Issue): Record<string, string> => ({
     title: i.title, description: i.description ?? '',
     type: i.type, priority: i.priority, status: i.status,
-    label: i.label ?? '', assignee_id: i.assignee_id ?? '',
+    label: i.label ?? '',
     sprint_id: i.sprint_id ?? '', story_points: i.story_points?.toString() ?? '',
     due_date: i.due_date ?? '',
   });
@@ -396,8 +406,8 @@ function IssueDetailPanel({ issue, projectId, sprints, members, currentUser, onC
   const { icon: TypeIcon, color: typeColor, label: typeLabel } = TYPE_META[issue.type] ?? TYPE_META.task;
   const { icon: StatusIcon, color: statusColor, label: statusLabel } = STATUS_META[issue.status] ?? STATUS_META.backlog;
   const sprint = sprints.find((s) => s.id === issue.sprint_id);
-  const assignee = members.find((m) => m.id === issue.assignee_id);
   const labelMeta = LABELS.find((l) => l.name === issue.label);
+  const canAssign = canManageProjects(currentUser?.role);
 
   return (
     <div className="w-full lg:w-[440px] shrink-0 bg-white rounded-xl border border-gray-200 flex flex-col max-h-[calc(100vh-120px)] sticky top-4">
@@ -454,20 +464,18 @@ function IssueDetailPanel({ issue, projectId, sprints, members, currentUser, onC
             )}
           </MetaField>
 
-          <MetaField label="Assignee">
-            {editing ? (
-              <select value={editForm.assignee_id} onChange={(e) => setEditForm({ ...editForm, assignee_id: e.target.value })} className={META_SELECT}>
-                <option value="">Unassigned</option>
-                {members.map((m) => <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>)}
-              </select>
-            ) : assignee ? (
-              <div className="flex items-center gap-1.5">
-                <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-bold flex items-center justify-center">
-                  {getInitials(`${assignee.first_name} ${assignee.last_name}`)}
-                </div>
-                <span className="text-xs text-gray-700">{assignee.first_name} {assignee.last_name}</span>
-              </div>
-            ) : <span className="text-xs text-gray-400">Unassigned</span>}
+          <MetaField label="Assignees">
+            <div className="flex items-center gap-2 min-w-0">
+              <AssigneePicker
+                issue={issue}
+                projectId={projectId}
+                members={members}
+                canAssign={canAssign}
+              />
+              <span className={cn('text-xs truncate', assigneesOf(issue).length ? 'text-gray-700' : 'text-gray-400')}>
+                {assigneesOf(issue).map((p) => p.name).join(', ') || 'Unassigned'}
+              </span>
+            </div>
           </MetaField>
 
           <MetaField label="Sprint">
@@ -582,7 +590,6 @@ function IssueDetailPanel({ issue, projectId, sprints, members, currentUser, onC
               onClick={() => updateMutation.mutate({
                 ...editForm,
                 story_points: editForm.story_points ? Number(editForm.story_points) : null,
-                assignee_id: editForm.assignee_id || null,
                 sprint_id: editForm.sprint_id || null,
                 label: editForm.label || null,
                 due_date: editForm.due_date || null,

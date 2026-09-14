@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -9,19 +9,28 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  closestCenter,
+  closestCorners,
   MeasuringStrategy,
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { useQuery } from '@tanstack/react-query';
 import { projectsApi } from '@/lib/api';
 import { KanbanColumn } from './kanban-column';
-import { IssueCard } from './issue-card';
-import { IssueCreateModal } from '@/components/issues/issue-create-modal';
+import { IssueCardFace } from './issue-card';
 import { IssueDetailDrawer } from '@/components/issues/issue-detail-drawer';
+import { useAuthStore } from '@/store/auth.store';
+import { canManageProjects } from '@/lib/roles';
+import { issueAssigneeIds } from '@/lib/utils';
 import type { Issue, IssueStatus, ProjectMember } from '@/types';
 
 interface Column { key: IssueStatus; label: string; color: string; issues: Issue[] }
+
+function columnsFingerprint(columns: Column[]) {
+  return JSON.stringify(columns.map((c) => ({
+    k: c.key,
+    items: c.issues.map((i) => `${i.id}:${issueAssigneeIds(i).join(',')}:${i.status}:${(i.pull_requests ?? []).map((p) => `${p.id}:${p.merged}`).join(',')}`),
+  })));
+}
 
 interface Props {
   columns: Column[];
@@ -31,19 +40,21 @@ interface Props {
 }
 
 export function KanbanBoard({ columns: initialColumns, onMove, projectId, sprintId }: Props) {
-  // Local optimistic state — mirrors server columns but updates immediately on drag
   const [cols, setCols] = useState<Column[]>(initialColumns);
-  // Sync when server data changes (but not while dragging)
   const isDragging = useRef(false);
-  if (!isDragging.current) {
-    const serverJson = JSON.stringify(initialColumns.map((c) => ({ k: c.key, ids: c.issues.map((i) => i.id) })));
-    const localJson  = JSON.stringify(cols.map((c) => ({ k: c.key, ids: c.issues.map((i) => i.id) })));
-    if (serverJson !== localJson) setCols(initialColumns);
-  }
+  const serverFingerprint = useRef(columnsFingerprint(initialColumns));
+
+  useEffect(() => {
+    const next = columnsFingerprint(initialColumns);
+    if (isDragging.current) return;
+    if (next !== serverFingerprint.current) {
+      serverFingerprint.current = next;
+      setCols(initialColumns);
+    }
+  }, [initialColumns]);
 
   const [activeIssue, setActiveIssue] = useState<Issue | null>(null);
   const [activeTargetKey, setActiveTargetKey] = useState<string | null>(null);
-  const [createStatus, setCreateStatus] = useState<IssueStatus | null>(null);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   // Track the column the card came from — onDragOver moves it before handleDragEnd fires
   const srcColKeyRef = useRef<string | null>(null);
@@ -53,6 +64,18 @@ export function KanbanBoard({ columns: initialColumns, onMove, projectId, sprint
     queryFn: () => projectsApi.get(projectId),
   });
   const members: ProjectMember[] = project?.members ?? [];
+  const user = useAuthStore((s) => s.user);
+  const myProjectRole = members.find((m) => m.id === user?.id)?.role;
+  const canAssign = canManageProjects(user?.role, project?.owner_id, user?.id, myProjectRole);
+
+  const patchIssue = useCallback((issueId: string, patch: Partial<Issue>) => {
+    setCols((prev) =>
+      prev.map((c) => ({
+        ...c,
+        issues: c.issues.map((i) => (i.id === issueId ? { ...i, ...patch } : i)),
+      })),
+    );
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -150,52 +173,55 @@ export function KanbanBoard({ columns: initialColumns, onMove, projectId, sprint
   };
 
   return (
-    <>
+    <div className="h-full">
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={closestCorners}
         measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        <div className="flex gap-4 overflow-x-auto pb-4 min-h-[calc(100vh-220px)]">
+        <div className="flex gap-3 overflow-x-auto h-full min-h-[520px] pb-1">
           {cols.map((col) => (
             <KanbanColumn
               key={col.key}
               column={col}
               projectId={projectId}
+              sprintId={sprintId}
               isDragTarget={activeTargetKey === col.key}
-              onAddIssue={(status) => setCreateStatus(status)}
               onCardClick={(issue) => setSelectedIssueId(issue.id)}
+              members={members}
+              canAssign={canAssign}
+              onIssuePatch={patchIssue}
             />
           ))}
         </div>
 
         <DragOverlay dropAnimation={{ duration: 180, easing: 'ease' }}>
-          {activeIssue ? <IssueCard issue={activeIssue} isDragging /> : null}
+          {activeIssue ? (
+            <IssueCardFace
+              issue={activeIssue}
+              overlay
+              className="w-[264px]"
+              members={members}
+              projectId={projectId}
+              canAssign={false}
+            />
+          ) : null}
         </DragOverlay>
       </DndContext>
-
-      {createStatus && (
-        <IssueCreateModal
-          projectId={projectId}
-          sprintId={sprintId}
-          defaultStatus={createStatus}
-          members={members}
-          onClose={() => setCreateStatus(null)}
-        />
-      )}
 
       {selectedIssueId && (
         <IssueDetailDrawer
           projectId={projectId}
           issueId={selectedIssueId}
           members={members}
+          canAssign={canAssign}
           onClose={() => setSelectedIssueId(null)}
         />
       )}
-    </>
+    </div>
   );
 }

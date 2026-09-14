@@ -19,6 +19,7 @@ export default function BacklogPage() {
   const [showCreateSprint, setShowCreateSprint] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [addIssueToSprint, setAddIssueToSprint] = useState<Sprint | null>(null);
+  const [completeTarget, setCompleteTarget] = useState<Sprint | null>(null);
 
   const { data: sprints = [], isLoading: sprintsLoading } = useQuery<Sprint[]>({
     queryKey: ['sprints', projectId],
@@ -38,15 +39,30 @@ export default function BacklogPage() {
     return acc;
   }, {});
   const backlogIssues = issuesBySprint['__backlog__'] ?? [];
+  const activeSprint = sprints.find((s) => s.status === 'active');
+  const nextPlanning = sprints.filter((s) => s.status === 'planning').sort((a, b) => a.name.localeCompare(b.name))[0];
 
-  const updateSprintMutation = useMutation({
-    mutationFn: ({ sprintId, status }: { sprintId: string; status: string }) =>
-      sprintsApi.update(projectId, sprintId, { status }),
+  const startSprintMutation = useMutation({
+    mutationFn: (sprintId: string) => sprintsApi.start(projectId, sprintId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sprints', projectId] });
-      toast.success('Sprint updated');
+      toast.success('Sprint started');
     },
-    onError: () => toast.error('Failed to update sprint'),
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to start sprint'),
+  });
+
+  const completeSprintMutation = useMutation({
+    mutationFn: (sprintId: string) => sprintsApi.complete(projectId, sprintId),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['sprints', projectId] });
+      qc.invalidateQueries({ queryKey: ['issues', projectId] });
+      setCompleteTarget(null);
+      const rolled = res?.rolled ?? 0;
+      if (rolled && res?.rolledTo) toast.success(`Sprint completed. ${rolled} issue${rolled === 1 ? '' : 's'} moved to ${res.rolledTo.name}`);
+      else if (rolled) toast.success(`Sprint completed. ${rolled} issue${rolled === 1 ? '' : 's'} moved to backlog`);
+      else toast.success('Sprint completed');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to complete sprint'),
   });
 
   const moveToSprintMutation = useMutation({
@@ -145,8 +161,10 @@ export default function BacklogPage() {
                 )}
                 {sprint.status === 'planning' && (
                   <button
-                    onClick={() => updateSprintMutation.mutate({ sprintId: sprint.id, status: 'active' })}
-                    className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                    onClick={() => startSprintMutation.mutate(sprint.id)}
+                    disabled={!!activeSprint}
+                    title={activeSprint ? `Complete “${activeSprint.name}” first` : 'Start this sprint'}
+                    className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Play size={11} />
                     Start
@@ -161,7 +179,7 @@ export default function BacklogPage() {
                       Open Board
                     </Link>
                     <button
-                      onClick={() => updateSprintMutation.mutate({ sprintId: sprint.id, status: 'completed' })}
+                      onClick={() => setCompleteTarget(sprint)}
                       className="flex items-center gap-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition-colors"
                     >
                       <CheckCircle size={11} />
@@ -259,6 +277,72 @@ export default function BacklogPage() {
           onClose={() => setAddIssueToSprint(null)}
         />
       )}
+
+      {completeTarget && (
+        <CompleteSprintModal
+          sprint={completeTarget}
+          leftover={(issuesBySprint[completeTarget.id] ?? []).filter((i) => i.status !== 'done').length}
+          rolledToName={nextPlanning?.name}
+          pending={completeSprintMutation.isPending}
+          onConfirm={() => completeSprintMutation.mutate(completeTarget.id)}
+          onClose={() => setCompleteTarget(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function CompleteSprintModal({
+  sprint,
+  leftover,
+  rolledToName,
+  pending,
+  onConfirm,
+  onClose,
+}: {
+  sprint: Sprint;
+  leftover: number;
+  rolledToName?: string;
+  pending: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-bold text-gray-900">Complete {sprint.name}?</h2>
+        <p className="text-sm text-gray-600 mt-2">
+          {leftover === 0
+            ? 'All issues in this sprint are done.'
+            : leftover === 1
+              ? rolledToName
+                ? `1 unfinished issue will move to ${rolledToName}.`
+                : '1 unfinished issue will move back to the backlog.'
+              : rolledToName
+                ? `${leftover} unfinished issues will move to ${rolledToName}.`
+                : `${leftover} unfinished issues will move back to the backlog.`}
+        </p>
+        <div className="flex justify-end gap-2 mt-6">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={pending}
+            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+          >
+            {pending ? 'Completing…' : 'Complete sprint'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

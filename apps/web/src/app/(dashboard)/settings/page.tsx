@@ -327,6 +327,8 @@ function MembersSection() {
   const ROLE_COLOR: Record<string, string> = {
     admin: 'bg-purple-100 text-purple-700',
     manager: 'bg-blue-100 text-blue-700',
+    project_manager: 'bg-indigo-100 text-indigo-700',
+    hr: 'bg-teal-100 text-teal-700',
     employee: 'bg-gray-100 text-gray-600',
   };
 
@@ -363,6 +365,7 @@ function MembersSection() {
               className={cn('text-xs border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500', ROLE_COLOR[emp.role])}
             >
               <option value="employee">Employee</option>
+              <option value="project_manager">Project manager</option>
               <option value="manager">Manager</option>
               <option value="hr">HR</option>
               <option value="admin">Admin</option>
