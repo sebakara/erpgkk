@@ -27,27 +27,27 @@ export class IssuesController {
   }
 
   @Post()
-  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager)
   create(@Param('projectId') projectId: string, @CurrentUser() user: any, @Body() body: any) {
     return this.issuesService.create(projectId, user.id, body);
   }
 
   @Post('bulk')
-  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager)
   bulkCreate(@Param('projectId') projectId: string, @CurrentUser() user: any, @Body() body: { issues: any[] }) {
     return this.issuesService.bulkCreate(projectId, user.id, body.issues ?? []);
   }
 
   @Patch(':id')
   @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.issuesService.update(id, body);
+  update(@Param('id') id: string, @CurrentUser() user: any, @Body() body: any) {
+    return this.issuesService.update(id, body, user.role);
   }
 
   @Patch(':id/move')
   @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
-  move(@Param('id') id: string, @Body() body: { status: string; position: number }) {
-    return this.issuesService.moveStatus(id, body.status, body.position);
+  move(@Param('id') id: string, @CurrentUser() user: any, @Body() body: { status: string; position: number }) {
+    return this.issuesService.moveStatus(id, body.status, body.position, user.role);
   }
 
   @Post(':id/comments')
@@ -69,7 +69,7 @@ export class IssuesController {
   }
 
   @Delete(':id')
-  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager)
   remove(@Param('id') id: string) {
     return this.issuesService.remove(id);
   }

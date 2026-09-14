@@ -19,7 +19,7 @@ import { KanbanColumn } from './kanban-column';
 import { IssueCardFace } from './issue-card';
 import { IssueDetailDrawer } from '@/components/issues/issue-detail-drawer';
 import { useAuthStore } from '@/store/auth.store';
-import { canManageProjects } from '@/lib/roles';
+import { canManageProjects, canPlanWork } from '@/lib/roles';
 import { issueAssigneeIds } from '@/lib/utils';
 import type { Issue, IssueStatus, ProjectMember } from '@/types';
 
@@ -67,6 +67,7 @@ export function KanbanBoard({ columns: initialColumns, onMove, projectId, sprint
   const user = useAuthStore((s) => s.user);
   const myProjectRole = members.find((m) => m.id === user?.id)?.role;
   const canAssign = canManageProjects(user?.role, project?.owner_id, user?.id, myProjectRole);
+  const canCreate = canPlanWork(user?.role);
 
   const patchIssue = useCallback((issueId: string, patch: Partial<Issue>) => {
     setCols((prev) =>
@@ -106,6 +107,7 @@ export function KanbanBoard({ columns: initialColumns, onMove, projectId, sprint
     const activeCol = findColumn(activeId);
     const overCol   = findColumn(overId);
     if (!activeCol || !overCol || activeCol.key === overCol.key) return;
+    if (!canCreate && overCol.key === 'done') return;
 
     setActiveTargetKey(overCol.key);
     setCols((prev) => {
@@ -146,6 +148,10 @@ export function KanbanBoard({ columns: initialColumns, onMove, projectId, sprint
     // overCol is determined from the pre-optimistic state (origColKey) vs where we dropped
     const overCol = cols.find((c) => c.key === overId || c.issues.some((i) => i.id === overId));
     if (!overCol) return;
+    if (!canCreate && overCol.key === 'done' && origColKey !== 'done') {
+      setCols(initialColumns);
+      return;
+    }
 
     if (origColKey === overCol.key) {
       // Same-column reorder: onDragOver didn't touch cols for this, so positions are still original
@@ -194,6 +200,7 @@ export function KanbanBoard({ columns: initialColumns, onMove, projectId, sprint
               onCardClick={(issue) => setSelectedIssueId(issue.id)}
               members={members}
               canAssign={canAssign}
+              canCreate={canCreate}
               onIssuePatch={patchIssue}
             />
           ))}
@@ -219,6 +226,7 @@ export function KanbanBoard({ columns: initialColumns, onMove, projectId, sprint
           issueId={selectedIssueId}
           members={members}
           canAssign={canAssign}
+          canPlan={canCreate}
           onClose={() => setSelectedIssueId(null)}
         />
       )}

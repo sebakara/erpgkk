@@ -75,11 +75,6 @@ export class GitHubProjectsController {
     return this.github.listReleases(id, user);
   }
 
-  @Get('issues')
-  issues(@Param('id') id: string, @CurrentUser() user: any, @Query('state') state?: string) {
-    return this.github.listIssues(id, user, { state });
-  }
-
   @Get('contributors')
   contributors(@Param('id') id: string, @CurrentUser() user: any) {
     return this.github.listContributors(id, user);

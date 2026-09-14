@@ -18,10 +18,11 @@ interface Props {
   issueId: string;
   members: ProjectMember[];
   canAssign?: boolean;
+  canPlan?: boolean;
   onClose: () => void;
 }
 
-export function IssueDetailDrawer({ projectId, issueId, members, canAssign, onClose }: Props) {
+export function IssueDetailDrawer({ projectId, issueId, members, canAssign, canPlan, onClose }: Props) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -158,7 +159,7 @@ export function IssueDetailDrawer({ projectId, issueId, members, canAssign, onCl
                     <option value="todo">To Do</option>
                     <option value="in_progress">In Progress</option>
                     <option value="in_review">In Review</option>
-                    <option value="done">Done</option>
+                    {canPlan && <option value="done">Done</option>}
                   </select>
                 ) : (
                   <StatusBadge status={issue.status} />

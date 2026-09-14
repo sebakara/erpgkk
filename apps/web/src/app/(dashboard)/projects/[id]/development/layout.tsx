@@ -10,7 +10,6 @@ const SUBNAV = [
   { label: 'Commits', segment: 'commits' },
   { label: 'Contributors', segment: 'contributors' },
   { label: 'Releases', segment: 'releases' },
-  { label: 'GitHub Issues', segment: 'issues' },
 ];
 
 export default function DevelopmentLayout({ children }: { children: React.ReactNode }) {

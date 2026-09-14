@@ -539,7 +539,6 @@ export class GitHubService {
         repo_count: 0,
         open_prs: 0,
         merged_prs_30d: 0,
-        open_issues: 0,
         latest_release: null,
         recent_pull_requests: [],
         recent_commits: [],
@@ -547,10 +546,9 @@ export class GitHubService {
       };
     }
     const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const [openPrs, mergedPrs, openIssues, latestRelease, recentPrs, recentCommits, recentReleases] = await Promise.all([
+    const [openPrs, mergedPrs, latestRelease, recentPrs, recentCommits, recentReleases] = await Promise.all([
       this.knex('github_pull_requests').whereIn('github_repository_id', repoIds).andWhere('state', 'open').count('* as c').first(),
       this.knex('github_pull_requests').whereIn('github_repository_id', repoIds).where('merged', true).where('merged_at', '>=', since30).count('* as c').first(),
-      this.knex('github_issues').whereIn('github_repository_id', repoIds).andWhere('state', 'open').count('* as c').first(),
       this.knex('github_releases as rel')
         .join('github_repositories as r', 'rel.github_repository_id', 'r.id')
         .whereIn('rel.github_repository_id', repoIds)
@@ -566,7 +564,6 @@ export class GitHubService {
       repo_count: repoIds.length,
       open_prs: Number(openPrs?.c ?? 0),
       merged_prs_30d: Number(mergedPrs?.c ?? 0),
-      open_issues: Number(openIssues?.c ?? 0),
       latest_release: latestRelease ?? null,
       recent_pull_requests: recentPrs,
       recent_commits: recentCommits,
@@ -627,20 +624,6 @@ export class GitHubService {
       .orderBy('rel.published_at', 'desc')
       .select('rel.*', 'r.full_name as repository')
       .limit(opts.limit ?? 50);
-  }
-
-  async listIssues(projectId: string, user: any, opts: { limit?: number; state?: string } = {}) {
-    await this.assertCanViewProject(projectId, user);
-    const repoIds = await this.projectRepoIds(projectId);
-    if (!repoIds.length) return [];
-    const q = this.knex('github_issues as i')
-      .join('github_repositories as r', 'i.github_repository_id', 'r.id')
-      .whereIn('i.github_repository_id', repoIds)
-      .orderBy('i.github_updated_at', 'desc')
-      .select('i.*', 'r.full_name as repository')
-      .limit(opts.limit ?? 100);
-    if (opts.state) q.andWhere('i.state', opts.state);
-    return q;
   }
 
   async listContributors(projectId: string, user: any) {

@@ -7,6 +7,8 @@ import Link from 'next/link';
 import { sprintsApi, issuesApi } from '@/lib/api';
 import { SprintCreateModal } from '@/components/sprint/sprint-create-modal';
 import { cn, getInitials } from '@/lib/utils';
+import { canPlanWork } from '@/lib/roles';
+import { useAuthStore } from '@/store/auth.store';
 import { PRIORITY_CONFIG, type Issue, type Sprint } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -16,6 +18,7 @@ const TYPE_COLOR = { bug: 'text-red-500', task: 'text-blue-500', story: 'text-gr
 export default function BacklogPage() {
   const { id: projectId } = useParams<{ id: string }>();
   const qc = useQueryClient();
+  const canPlan = canPlanWork(useAuthStore((s) => s.user?.role));
   const [showCreateSprint, setShowCreateSprint] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [addIssueToSprint, setAddIssueToSprint] = useState<Sprint | null>(null);
@@ -91,6 +94,7 @@ export default function BacklogPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">Sprint Planning</h1>
+        {canPlan && (
         <button
           onClick={() => setShowCreateSprint(true)}
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
@@ -98,6 +102,7 @@ export default function BacklogPage() {
           <Plus size={15} />
           Create Sprint
         </button>
+        )}
       </div>
 
       {/* Sprint sections */}
@@ -150,7 +155,7 @@ export default function BacklogPage() {
 
               {/* Sprint actions */}
               <div className="flex items-center gap-2 shrink-0">
-                {sprint.status !== 'completed' && backlogIssues.length > 0 && (
+                {canPlan && sprint.status !== 'completed' && backlogIssues.length > 0 && (
                   <button
                     onClick={() => setAddIssueToSprint(sprint)}
                     className="flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg transition-colors"
@@ -159,7 +164,7 @@ export default function BacklogPage() {
                     Add Issues
                   </button>
                 )}
-                {sprint.status === 'planning' && (
+                {canPlan && sprint.status === 'planning' && (
                   <button
                     onClick={() => startSprintMutation.mutate(sprint.id)}
                     disabled={!!activeSprint}
@@ -178,6 +183,7 @@ export default function BacklogPage() {
                     >
                       Open Board
                     </Link>
+                    {canPlan && (
                     <button
                       onClick={() => setCompleteTarget(sprint)}
                       className="flex items-center gap-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition-colors"
@@ -185,6 +191,7 @@ export default function BacklogPage() {
                       <CheckCircle size={11} />
                       Complete
                     </button>
+                    )}
                   </>
                 )}
               </div>
@@ -210,6 +217,7 @@ export default function BacklogPage() {
                         moveToSprintMutation.mutate({ issueId: issue.id, sprintId: null })
                       }
                       showBacklogOption
+                      canPlan={canPlan}
                     />
                   ))
                 )}
@@ -221,13 +229,15 @@ export default function BacklogPage() {
 
       {sprints.length === 0 && (
         <div className="bg-white rounded-xl border border-dashed border-gray-300 p-10 text-center">
-          <p className="text-gray-400 text-sm mb-3">No sprints yet. Create your first sprint to start planning.</p>
+          <p className="text-gray-400 text-sm mb-3">No sprints yet. {canPlan ? 'Create your first sprint to start planning.' : 'A manager will create the first sprint.'}</p>
+          {canPlan && (
           <button
             onClick={() => setShowCreateSprint(true)}
             className="text-sm font-medium text-primary-600 hover:text-primary-700"
           >
             + Create Sprint
           </button>
+          )}
         </div>
       )}
 
@@ -258,6 +268,7 @@ export default function BacklogPage() {
                   }
                   onMoveToBacklog={() => {}}
                   showBacklogOption={false}
+                  canPlan={canPlan}
                 />
               ))
             )}
@@ -492,12 +503,14 @@ function IssueRow({
   onMove,
   onMoveToBacklog,
   showBacklogOption,
+  canPlan,
 }: {
   issue: Issue;
   sprints: Sprint[];
   onMove: (sprintId: string) => void;
   onMoveToBacklog: () => void;
   showBacklogOption: boolean;
+  canPlan?: boolean;
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const Icon = TYPE_ICON[issue.type];
@@ -536,7 +549,7 @@ function IssueRow({
       </div>
 
       {/* Move to sprint */}
-      {sprints.length > 0 && (
+      {canPlan && sprints.length > 0 && (
         <div className="relative shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={() => setShowMenu((v) => !v)}

@@ -11,7 +11,7 @@ import { issuesApi, sprintsApi, usersApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { cn, getInitials, formatDate, assigneesOf, issueHasAssignee } from '@/lib/utils';
 import { AssigneePicker } from '@/components/kanban/assignee-picker';
-import { canManageProjects } from '@/lib/roles';
+import { canManageProjects, canPlanWork } from '@/lib/roles';
 import toast from 'react-hot-toast';
 import type { Issue, Sprint } from '@/types';
 
@@ -61,6 +61,7 @@ export default function IssuesPage() {
   const { id: projectId } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
+  const canPlan = canPlanWork(currentUser?.role);
 
   /* data */
   const { data: issues = [], isLoading } = useQuery<Issue[]>({
@@ -161,7 +162,7 @@ export default function IssuesPage() {
           )}
 
           <div className="flex items-center gap-1 ml-auto">
-            {currentUser?.role !== 'employee' && (
+            {canPlan && (
               <button
                 onClick={() => setShowBulk(true)}
                 className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors"
@@ -169,12 +170,14 @@ export default function IssuesPage() {
                 <Layers size={14} /> Bulk import
               </button>
             )}
+            {canPlan && (
             <button
               onClick={() => setShowCreate(true)}
               className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
             >
               <Plus size={14} /> New issue
             </button>
+            )}
           </div>
         </div>
 
@@ -277,6 +280,7 @@ function IssueRow({ issue, sprints, projectId, isSelected, onClick }: {
   issue: Issue; sprints: Sprint[]; projectId: string; isSelected: boolean; onClick: () => void;
 }) {
   const qc = useQueryClient();
+  const canDelete = canPlanWork(useAuthStore((s) => s.user?.role));
   const { icon: TypeIcon, color: typeColor } = TYPE_META[issue.type] ?? TYPE_META.task;
   const { dot: prioDot, label: prioLabel } = PRIORITY_META[issue.priority] ?? PRIORITY_META.medium;
   const { icon: StatusIcon, color: statusColor, label: statusLabel } = STATUS_META[issue.status] ?? STATUS_META.backlog;
@@ -359,12 +363,14 @@ function IssueRow({ issue, sprints, projectId, isSelected, onClick }: {
             ))}
           </div>
         )}
+        {canDelete && (
         <button
           onClick={(e) => { e.stopPropagation(); if (confirm('Delete this issue?')) deleteMutation.mutate(); }}
           className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-red-500 rounded transition-all"
         >
           <Trash2 size={13} />
         </button>
+        )}
       </div>
     </div>
   );
@@ -408,6 +414,7 @@ function IssueDetailPanel({ issue, projectId, sprints, members, currentUser, onC
   const sprint = sprints.find((s) => s.id === issue.sprint_id);
   const labelMeta = LABELS.find((l) => l.name === issue.label);
   const canAssign = canManageProjects(currentUser?.role);
+  const canPlan = canPlanWork(currentUser?.role);
 
   return (
     <div className="w-full lg:w-[440px] shrink-0 bg-white rounded-xl border border-gray-200 flex flex-col max-h-[calc(100vh-120px)] sticky top-4">
@@ -445,7 +452,7 @@ function IssueDetailPanel({ issue, projectId, sprints, members, currentUser, onC
           <MetaField label="Status">
             {editing ? (
               <select value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })} className={META_SELECT}>
-                {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                {Object.entries(STATUS_META).filter(([k]) => canPlan || k !== 'done').map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>
             ) : (
               <span className={cn('text-xs font-medium capitalize', statusColor)}>{statusLabel}</span>

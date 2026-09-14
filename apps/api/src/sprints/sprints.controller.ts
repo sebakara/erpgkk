@@ -1,9 +1,12 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
 import { SprintsService } from './sprints.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/enums';
 
 @Controller('projects/:projectId/sprints')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class SprintsController {
   constructor(private sprintsService: SprintsService) {}
 
@@ -18,11 +21,13 @@ export class SprintsController {
   }
 
   @Post(':id/start')
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager)
   start(@Param('projectId') projectId: string, @Param('id') id: string) {
     return this.sprintsService.start(projectId, id);
   }
 
   @Post(':id/complete')
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager)
   complete(@Param('projectId') projectId: string, @Param('id') id: string) {
     return this.sprintsService.complete(projectId, id);
   }
@@ -33,16 +38,19 @@ export class SprintsController {
   }
 
   @Post()
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager)
   create(@Param('projectId') projectId: string, @Body() body: any) {
     return this.sprintsService.create(projectId, body);
   }
 
   @Patch(':id')
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager)
   update(@Param('id') id: string, @Body() body: any) {
     return this.sprintsService.update(id, body);
   }
 
   @Delete(':id')
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager)
   remove(@Param('id') id: string) {
     return this.sprintsService.remove(id);
   }

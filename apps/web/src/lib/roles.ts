@@ -4,6 +4,10 @@ export function isHrLead(role?: string | null) {
   return role === 'admin' || role === 'manager' || role === 'hr';
 }
 
+export function canPlanWork(role?: string | null) {
+  return role === 'admin' || role === 'manager' || role === 'project_manager';
+}
+
 export function canManageProjects(
   role?: string | null,
   ownerId?: string,

@@ -1,7 +1,7 @@
 'use client';
 import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { GitPullRequest, GitCommit, Tag, CircleDot, FolderGit2, ExternalLink } from 'lucide-react';
+import { GitPullRequest, GitCommit, Tag, FolderGit2, ExternalLink } from 'lucide-react';
 import { githubApi } from '@/lib/api';
 import { DevSpinner, Empty, formatDate } from './ui';
 
@@ -28,11 +28,10 @@ export default function DevelopmentOverviewPage() {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <Kpi icon={<FolderGit2 size={16} />} label="Repositories" value={data.repo_count} />
         <Kpi icon={<GitPullRequest size={16} />} label="Open PRs" value={data.open_prs} />
         <Kpi icon={<GitCommit size={16} />} label="Merged (30d)" value={data.merged_prs_30d} />
-        <Kpi icon={<CircleDot size={16} />} label="Open GitHub issues" value={data.open_issues} />
       </div>
 
       {data.latest_release && (

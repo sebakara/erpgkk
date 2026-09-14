@@ -20,10 +20,11 @@ interface Props {
   onCardClick: (issue: Issue) => void;
   members: ProjectMember[];
   canAssign: boolean;
+  canCreate?: boolean;
   onIssuePatch?: (issueId: string, patch: Partial<Issue>) => void;
 }
 
-export function KanbanColumn({ column, projectId, sprintId, isDragTarget, onCardClick, members, canAssign, onIssuePatch }: Props) {
+export function KanbanColumn({ column, projectId, sprintId, isDragTarget, onCardClick, members, canAssign, canCreate, onIssuePatch }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: column.key });
   const [adding, setAdding] = useState(false);
 
@@ -38,14 +39,16 @@ export function KanbanColumn({ column, projectId, sprintId, isDragTarget, onCard
         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: column.color }} />
         <h2 className="text-[15px] font-semibold text-gray-800 truncate">{column.label}</h2>
         <span className="text-xs text-gray-500">{column.issues.length}</span>
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className="ml-auto p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-black/5"
-          title={`Add task to ${column.label}`}
-        >
-          <Plus size={16} />
-        </button>
+        {canCreate && (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="ml-auto p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-black/5"
+            title={`Add task to ${column.label}`}
+          >
+            <Plus size={16} />
+          </button>
+        )}
       </header>
 
       <SortableContext items={column.issues.map((i) => i.id)} strategy={verticalListSortingStrategy}>
@@ -64,6 +67,7 @@ export function KanbanColumn({ column, projectId, sprintId, isDragTarget, onCard
         </div>
       </SortableContext>
 
+      {canCreate && (
       <div className="px-2 pb-2 pt-1">
         {adding ? (
           <InlineAddTask
@@ -82,6 +86,7 @@ export function KanbanColumn({ column, projectId, sprintId, isDragTarget, onCard
           </button>
         )}
       </div>
+      )}
     </section>
   );
 }

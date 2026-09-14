@@ -279,8 +279,6 @@ export const githubApi = {
     api.get(`/projects/${projectId}/github/commits`).then((r) => r.data),
   releases: (projectId: string) =>
     api.get(`/projects/${projectId}/github/releases`).then((r) => r.data),
-  issues: (projectId: string, state?: string) =>
-    api.get(`/projects/${projectId}/github/issues`, { params: state ? { state } : {} }).then((r) => r.data),
   contributors: (projectId: string) =>
     api.get(`/projects/${projectId}/github/contributors`).then((r) => r.data),
 };

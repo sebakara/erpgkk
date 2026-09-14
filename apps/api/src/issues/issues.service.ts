@@ -1,8 +1,9 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { loadPullRequestsForIssues, insertPrLink } from '../integrations/github-pr-links';
+import { roleCanPlanWork } from '../common/access/projects';
 import { v4 as uuid } from 'uuid';
 
 type IssueWrite = {
@@ -157,13 +158,15 @@ export class IssuesService {
     return issue;
   }
 
-  async update(id: string, data: IssueWrite) {
-    const { assignee_ids, assignee_id, ...rest } = data;
+  async update(id: string, data: IssueWrite, role?: string) {
+    const payload = roleCanPlanWork(role) ? data : this.developerIssueWrite(data);
+    const { assignee_ids, assignee_id, ...rest } = payload;
     const hasAssigneePayload = Array.isArray(assignee_ids) || assignee_id !== undefined;
     if (Object.keys(rest).length) {
       await this.knex('issues').where({ id }).update({ ...rest, updated_at: new Date() });
     }
     if (hasAssigneePayload) {
+      if (!roleCanPlanWork(role)) throw new ForbiddenException('Only managers can assign work');
       const previous: string[] = await this.knex('issue_assignees').where({ issue_id: id }).pluck('user_id');
       const ids = this.normalizeAssigneeIds(assignee_ids, assignee_id);
       await this.replaceAssignees(id, ids);
@@ -175,7 +178,8 @@ export class IssuesService {
     return this.findById(id);
   }
 
-  async moveStatus(id: string, status: string, position: number) {
+  async moveStatus(id: string, status: string, position: number, role?: string) {
+    this.assertDeveloperStatus(status, role);
     await this.knex('issues').where({ id }).update({ status, position, updated_at: new Date() });
   }
 
@@ -269,6 +273,21 @@ export class IssuesService {
     } catch {
       return issues.map((issue: any) => ({ ...issue, pull_requests: issue.pull_requests ?? [] }));
     }
+  }
+
+  private developerIssueWrite(data: IssueWrite): IssueWrite {
+    this.assertDeveloperStatus(data.status);
+    const allowed: IssueWrite = {};
+    if (data.title !== undefined) allowed.title = data.title;
+    if (data.description !== undefined) allowed.description = data.description;
+    if (data.status !== undefined) allowed.status = data.status;
+    if (data.position !== undefined) allowed.position = data.position;
+    return allowed;
+  }
+
+  private assertDeveloperStatus(status?: string, role?: string) {
+    if (roleCanPlanWork(role)) return;
+    if (status === 'done') throw new ForbiddenException('Only managers can mark work done');
   }
 
   private normalizeAssigneeIds(assigneeIds?: string[] | null, assigneeId?: string | null) {
