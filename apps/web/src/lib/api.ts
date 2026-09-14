@@ -50,8 +50,10 @@ export const projectsApi = {
   get: (id: string) => api.get(`/projects/${id}`).then((r) => r.data),
   create: (data: any) => api.post('/projects', data).then((r) => r.data),
   update: (id: string, data: any) => api.patch(`/projects/${id}`, data).then((r) => r.data),
+  remove: (id: string) => api.delete(`/projects/${id}`).then((r) => r.data),
   addMember: (id: string, data: any) => api.post(`/projects/${id}/members`, data).then((r) => r.data),
   analytics: (id: string) => api.get(`/projects/${id}/analytics`).then((r) => r.data),
+  overview: () => api.get('/projects/overview').then((r) => r.data),
 };
 
 // Sprints

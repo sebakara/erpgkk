@@ -16,6 +16,11 @@ export class ProjectsController {
     return this.projectsService.findAll(user.company_id, user.id, user.role);
   }
 
+  @Get('overview')
+  overview(@CurrentUser() user: any) {
+    return this.projectsService.workspaceOverview(user.company_id, user.id, user.role);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.projectsService.findById(id, user.company_id);

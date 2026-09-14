@@ -20,6 +20,18 @@ import { GitHubAppClient } from './github-app.client';
 import { GitHubSyncService } from './github-sync.service';
 import { asGhId, mapRepository } from './github-mappers';
 
+function fillDayBuckets(n: number): Array<{ date: string }> {
+  const days: Array<{ date: string }> = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    const offset = d.getTimezoneOffset() * 60000;
+    days.push({ date: new Date(d.getTime() - offset).toISOString().slice(0, 10) });
+  }
+  return days;
+}
+
 @Injectable()
 export class GitHubService {
   private readonly logger = new Logger(GitHubService.name);
@@ -243,9 +255,13 @@ export class GitHubService {
     const repoIds = [...new Set(mappings.map((m) => m.repo_id))];
     const mappedProjectIds = new Set(mappings.map((m) => m.project_id));
     const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const since14 = new Date();
+    since14.setHours(0, 0, 0, 0);
+    since14.setDate(since14.getDate() - 13);
     const empty = { c: 0 };
+    const dayBuckets = fillDayBuckets(14);
 
-    const [openPrs, mergedPrs, recentPrs, recentCommits] = repoIds.length
+    const [openPrs, mergedPrs, recentPrs, recentCommits, commitDays, prStates, mergedAll] = repoIds.length
       ? await Promise.all([
           this.knex('github_pull_requests').whereIn('github_repository_id', repoIds).andWhere('state', 'open').count('* as c').first(),
           this.knex('github_pull_requests').whereIn('github_repository_id', repoIds).where('merged', true).where('merged_at', '>=', since30).count('* as c').first(),
@@ -261,8 +277,37 @@ export class GitHubService {
             .orderBy('c.committed_at', 'desc')
             .select('c.id', 'c.sha', 'c.message', 'c.html_url', 'c.author_login', 'c.author_name', 'c.committed_at', 'r.full_name as repository')
             .limit(8),
+          this.knex('github_commits')
+            .whereIn('github_repository_id', repoIds)
+            .where('committed_at', '>=', since14)
+            .select(this.knex.raw('DATE(committed_at) as day'))
+            .count('* as c')
+            .groupByRaw('DATE(committed_at)'),
+          this.knex('github_pull_requests')
+            .whereIn('github_repository_id', repoIds)
+            .select('state', 'merged')
+            .count('* as c')
+            .groupBy('state', 'merged'),
+          this.knex('github_pull_requests').whereIn('github_repository_id', repoIds).where('merged', true).count('* as c').first(),
         ])
-      : [empty, empty, [], []];
+      : [empty, empty, [], [], [], [], empty];
+
+    const commitsByDay = dayBuckets.map((d) => {
+      const row = (commitDays as any[]).find((r) => String(r.day).slice(0, 10) === d.date);
+      return { date: d.date, count: Number(row?.c ?? 0) };
+    });
+    let openCount = 0;
+    let closedCount = 0;
+    for (const row of prStates as any[]) {
+      const n = Number(row.c ?? 0);
+      if (row.state === 'open') openCount += n;
+      else closedCount += n;
+    }
+    const prsByState = [
+      { name: 'Open', value: openCount },
+      { name: 'Merged', value: Number((mergedAll as any)?.c ?? 0) },
+      { name: 'Closed', value: Math.max(0, closedCount - Number((mergedAll as any)?.c ?? 0)) },
+    ];
 
     const reposByProject = new Map<string, number>();
     for (const row of mappings) {
@@ -281,6 +326,8 @@ export class GitHubService {
       mapped_repo_count: repoIds.length,
       open_prs: Number((openPrs as any)?.c ?? 0),
       merged_prs_30d: Number((mergedPrs as any)?.c ?? 0),
+      commits_by_day: commitsByDay,
+      prs_by_state: prsByState,
       recent_pull_requests: recentPrs,
       recent_commits: recentCommits,
       projects: projects.map((p) => ({
@@ -303,6 +350,7 @@ export class GitHubService {
     const links = await this.knex('project_github_repositories as pgr')
       .join('projects as p', 'pgr.project_id', 'p.id')
       .whereIn('pgr.github_repository_id', repos.map((r) => r.id))
+      .whereNull('p.deleted_at')
       .select('pgr.github_repository_id', 'p.id as project_id', 'p.name as project_name');
     const byRepo = new Map<string, Array<{ id: string; name: string }>>();
     for (const link of links) {
@@ -689,6 +737,7 @@ export class GitHubService {
     return this.knex('project_github_repositories as pgr')
       .join('projects as p', 'pgr.project_id', 'p.id')
       .where('pgr.github_repository_id', repoId)
+      .whereNull('p.deleted_at')
       .select('p.id', 'p.company_id', 'p.owner_id', 'p.name', 'pgr.notify_chat');
   }
 
@@ -782,6 +831,7 @@ export class GitHubService {
   async assertCanViewProject(projectId: string, user: any) {
     const project = await this.knex('projects')
       .where({ id: projectId, company_id: user.company_id })
+      .whereNull('deleted_at')
       .first();
     if (!project) throw new NotFoundException('Project not found');
     if (await canManageAllProjects(this.knex, user.company_id, user.id, user.role)) return project;
@@ -815,6 +865,7 @@ export class GitHubService {
   private async visibleProjectsForUser(user: any) {
     const q = this.knex('projects as p')
       .where('p.company_id', user.company_id)
+      .whereNull('p.deleted_at')
       .select('p.id', 'p.name', 'p.icon', 'p.status', 'p.color')
       .orderBy('p.name', 'asc');
     if (await canManageAllProjects(this.knex, user.company_id, user.id, user.role)) return q;

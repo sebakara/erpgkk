@@ -1,5 +1,5 @@
 'use client';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { projectsApi } from '@/lib/api';
@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 
 export default function ProjectSettingsPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const qc = useQueryClient();
   const { data: project, isLoading } = useQuery({ queryKey: ['project', id], queryFn: () => projectsApi.get(id) });
 
@@ -19,6 +20,17 @@ export default function ProjectSettingsPage() {
       toast.success('Project updated');
     },
     onError: () => toast.error('Failed to update project'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => projectsApi.remove(id),
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: ['project', id] });
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      toast.success('Project deleted');
+      router.push('/projects');
+    },
+    onError: () => toast.error('Failed to delete project'),
   });
 
   if (isLoading) return <div className="flex items-center justify-center h-40"><div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" /></div>;
@@ -88,6 +100,24 @@ export default function ProjectSettingsPage() {
           className="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50"
         >
           {updateMutation.isPending ? 'Saving…' : 'Save changes'}
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl border border-red-200 p-6 shadow-sm space-y-3">
+        <h2 className="font-semibold text-gray-900">Delete project</h2>
+        <p className="text-sm text-gray-500">
+          Remove this project from the workspace. Issues, docs, and files stay in the database but the project will no longer appear in lists.
+        </p>
+        <button
+          onClick={() => {
+            if (confirm(`Delete “${project.name}”? It will disappear from the workspace.`)) {
+              deleteMutation.mutate();
+            }
+          }}
+          disabled={deleteMutation.isPending}
+          className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50"
+        >
+          {deleteMutation.isPending ? 'Deleting…' : 'Delete project'}
         </button>
       </div>
     </div>

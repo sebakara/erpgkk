@@ -4,6 +4,18 @@ import { KNEX_CONNECTION } from '../database/database.module';
 import { v4 as uuid } from 'uuid';
 import { ChatService } from '../chat/chat.service';
 
+function fillDays(n: number): Array<{ date: string; count: number }> {
+  const days: Array<{ date: string; count: number }> = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    const offset = d.getTimezoneOffset() * 60000;
+    days.push({ date: new Date(d.getTime() - offset).toISOString().slice(0, 10), count: 0 });
+  }
+  return days;
+}
+
 @Injectable()
 export class ProjectsService {
   constructor(
@@ -54,6 +66,113 @@ export class ProjectsService {
       })
       .select('p.*')
       .orderBy('p.created_at', 'asc');
+  }
+
+  async workspaceOverview(companyId: string, userId: string, userRole?: string) {
+    const projects = await this.findAll(companyId, userId, userRole);
+    const ids = (projects as any[]).map((p) => p.id);
+    const emptyDays = fillDays(14);
+
+    if (!ids.length) {
+      return {
+        projects: { total: 0, active: 0, archived: 0, completed: 0 },
+        issues: {
+          total: 0, done: 0, inProgress: 0, open: 0,
+          byStatus: {}, byPriority: {}, byType: {},
+          created_last_14d: emptyDays,
+        },
+        byProject: [],
+        mine: { open: 0, inProgress: 0, todo: 0 },
+        mine_issues: [],
+      };
+    }
+
+    const [issues, repoRows] = await Promise.all([
+      this.knex('issues')
+        .whereIn('project_id', ids)
+        .whereNull('deleted_at')
+        .select('id', 'project_id', 'status', 'priority', 'type', 'assignee_id', 'created_at', 'title'),
+      this.knex('project_github_repositories')
+        .whereIn('project_id', ids)
+        .groupBy('project_id')
+        .select('project_id')
+        .count('* as c'),
+    ]);
+
+    const reposByProject = new Map(repoRows.map((row: any) => [row.project_id, Number(row.c)]));
+    const byStatus: Record<string, number> = {};
+    const byPriority: Record<string, number> = {};
+    const byType: Record<string, number> = {};
+    const createdByDay = new Map(emptyDays.map((d) => [d.date, 0]));
+    const since14 = new Date();
+    since14.setHours(0, 0, 0, 0);
+    since14.setDate(since14.getDate() - 13);
+
+    for (const issue of issues) {
+      byStatus[issue.status] = (byStatus[issue.status] ?? 0) + 1;
+      byPriority[issue.priority] = (byPriority[issue.priority] ?? 0) + 1;
+      byType[issue.type] = (byType[issue.type] ?? 0) + 1;
+      const created = issue.created_at ? new Date(issue.created_at) : null;
+      if (created && created >= since14) {
+        const key = new Date(created.getTime() - created.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+        if (createdByDay.has(key)) createdByDay.set(key, (createdByDay.get(key) ?? 0) + 1);
+      }
+    }
+
+    const done = byStatus.done ?? 0;
+    const inProgress = (byStatus.in_progress ?? 0) + (byStatus.in_review ?? 0);
+    const mineIssues = issues.filter((i) => i.assignee_id === userId && i.status !== 'done');
+
+    const byProject = (projects as any[]).map((p) => {
+      const rows = issues.filter((i) => i.project_id === p.id);
+      const total = rows.length;
+      const projectDone = rows.filter((i) => i.status === 'done').length;
+      return {
+        id: p.id,
+        name: p.name,
+        icon: p.icon,
+        color: p.color,
+        status: p.status,
+        total,
+        done: projectDone,
+        open: total - projectDone,
+        inProgress: rows.filter((i) => i.status === 'in_progress' || i.status === 'in_review').length,
+        health: total === 0 ? 100 : Math.round((projectDone / total) * 100),
+        github_repos: reposByProject.get(p.id) ?? 0,
+      };
+    });
+
+    return {
+      projects: {
+        total: projects.length,
+        active: (projects as any[]).filter((p) => p.status === 'active').length,
+        archived: (projects as any[]).filter((p) => p.status === 'archived').length,
+        completed: (projects as any[]).filter((p) => p.status === 'completed').length,
+      },
+      issues: {
+        total: issues.length,
+        done,
+        inProgress,
+        open: issues.length - done,
+        byStatus,
+        byPriority,
+        byType,
+        created_last_14d: emptyDays.map((d) => ({ date: d.date, count: createdByDay.get(d.date) ?? 0 })),
+      },
+      byProject,
+      mine: {
+        open: mineIssues.length,
+        inProgress: mineIssues.filter((i) => i.status === 'in_progress' || i.status === 'in_review').length,
+        todo: mineIssues.filter((i) => i.status === 'todo' || i.status === 'backlog').length,
+      },
+      mine_issues: mineIssues.slice(0, 12).map((i) => ({
+        id: i.id,
+        project_id: i.project_id,
+        title: i.title,
+        status: i.status,
+        priority: i.priority,
+      })),
+    };
   }
 
   async findById(id: string, companyId: string) {
