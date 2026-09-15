@@ -5,9 +5,12 @@ import { projectsApi, departmentsApi, githubApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Plus, FolderOpen, GitBranch } from 'lucide-react';
 import Link from 'next/link';
+import { useAuthStore } from '@/store/auth.store';
+import { canPlanWork } from '@/lib/roles';
 
 export default function ProjectsPage() {
   const qc = useQueryClient();
+  const canCreate = canPlanWork(useAuthStore((s) => s.user?.role));
   const { data: projects = [], isLoading } = useQuery({ queryKey: ['projects'], queryFn: projectsApi.list });
   const { data: github } = useQuery({ queryKey: ['github-dashboard'], queryFn: githubApi.githubDashboard });
   const [showNew, setShowNew] = useState(false);
@@ -29,16 +32,20 @@ export default function ProjectsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
           <p className="text-gray-500 text-sm mt-1">{projects.length} project{projects.length === 1 ? '' : 's'}</p>
         </div>
-        <button onClick={() => setShowNew(true)} className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700">
-          <Plus size={16} /> New Project
-        </button>
+        {canCreate && (
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700">
+            <Plus size={16} /> New Project
+          </button>
+        )}
       </div>
 
       {projects.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-200">
           <FolderOpen size={40} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-gray-500">No projects yet. Create your first one.</p>
-          <button onClick={() => setShowNew(true)} className="mt-4 text-primary-600 font-medium text-sm hover:underline">+ New Project</button>
+          <p className="text-gray-500">{canCreate ? 'No projects yet. Create your first one.' : 'No projects yet.'}</p>
+          {canCreate && (
+            <button onClick={() => setShowNew(true)} className="mt-4 text-primary-600 font-medium text-sm hover:underline">+ New Project</button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -70,7 +77,7 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {showNew && (
+      {canCreate && showNew && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
             <h2 className="text-lg font-bold mb-4">New Project</h2>

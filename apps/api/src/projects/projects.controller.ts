@@ -27,7 +27,7 @@ export class ProjectsController {
   }
 
   @Post()
-  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager)
   create(@CurrentUser() user: any, @Body() body: any) {
     return this.projectsService.create(user.company_id, user.id, body);
   }
