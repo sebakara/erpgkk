@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { issuesApi, projectsApi, sprintsApi } from '@/lib/api';
@@ -12,6 +12,8 @@ import toast from 'react-hot-toast';
 
 export default function BoardPage() {
   const { id: projectId } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const openIssueId = searchParams.get('issue');
   const qc = useQueryClient();
   const role = useAuthStore((s) => s.user?.role);
   const showWorkload = role !== 'employee';
@@ -246,6 +248,7 @@ export default function BoardPage() {
           onMove={(issueId, status, position) => moveMutation.mutate({ id: issueId, status, position })}
           projectId={projectId}
           sprintId={createSprintId}
+          initialIssueId={openIssueId}
         />
       </div>
     </div>

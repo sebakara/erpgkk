@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('projects/:projectId/sprints')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -22,14 +23,14 @@ export class SprintsController {
 
   @Post(':id/start')
   @Roles(Role.Admin, Role.Manager, Role.ProjectManager)
-  start(@Param('projectId') projectId: string, @Param('id') id: string) {
-    return this.sprintsService.start(projectId, id);
+  start(@Param('projectId') projectId: string, @Param('id') id: string, @CurrentUser() user: any) {
+    return this.sprintsService.start(projectId, id, user.id);
   }
 
   @Post(':id/complete')
   @Roles(Role.Admin, Role.Manager, Role.ProjectManager)
-  complete(@Param('projectId') projectId: string, @Param('id') id: string) {
-    return this.sprintsService.complete(projectId, id);
+  complete(@Param('projectId') projectId: string, @Param('id') id: string, @CurrentUser() user: any) {
+    return this.sprintsService.complete(projectId, id, user.id);
   }
 
   @Get(':id')

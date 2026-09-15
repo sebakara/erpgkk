@@ -1,10 +1,12 @@
 'use client';
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { getSocket, disconnectSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth.store';
 import { usePresenceStore } from '@/store/presence.store';
-import { desktopNotify } from '@/lib/desktop-notify';
+import { desktopNotify, requestDesktopPermission } from '@/lib/desktop-notify';
+import { notificationHref } from '@/lib/notification';
 import { chatApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 
@@ -14,10 +16,14 @@ const INVALIDATIONS: Record<string, string[][]> = {
   leave_request_submitted:  [['leaves']],
   leave_requested:          [['leaves']],
   leave_package_allocated:  [['leave-balance'], ['leave-packages']],
-  issue_assigned:           [['issues']],
-  issue_status_changed:     [['issues']],
+  issue_assigned:           [['issues'], ['my-work'], ['workspace-overview']],
+  issue_status_changed:     [['issues'], ['my-work'], ['workspace-overview']],
   comment_added:            [['issues']],
+  sprint_started:           [['sprints'], ['issues'], ['my-work']],
+  sprint_completed:         [['sprints'], ['issues'], ['my-work']],
   performance_review_added: [['performance']],
+  performance_review_created: [['performance']],
+  performance_review_submitted: [['performance']],
   announcement:             [['announcements']],
   chat_mention:             [['chat-convs'], ['chat-unread']],
 };
@@ -32,7 +38,11 @@ function typeEmoji(type?: string) {
     case 'issue_assigned':           return '📋';
     case 'issue_status_changed':     return '🔄';
     case 'comment_added':            return '💬';
-    case 'performance_review_added': return '⭐';
+    case 'sprint_started':           return '▶️';
+    case 'sprint_completed':         return '🏁';
+    case 'performance_review_added':
+    case 'performance_review_created':
+    case 'performance_review_submitted': return '⭐';
     case 'announcement':             return '📢';
     case 'slack_joined':             return '💼';
     case 'slack_employee_joined':    return '👋';
@@ -54,13 +64,16 @@ function appendMessage(qc: ReturnType<typeof useQueryClient>, msg: any) {
 
 export function NotificationListener() {
   const qc = useQueryClient();
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
   const setAll = usePresenceStore((s) => s.setAll);
   const addOnline = usePresenceStore((s) => s.add);
   const removeOnline = usePresenceStore((s) => s.remove);
 
   useEffect(() => {
     if (!user) return;
+    requestDesktopPermission();
 
     const socket = getSocket();
 
@@ -68,18 +81,26 @@ export function NotificationListener() {
       .then((res) => setAll(res.userIds ?? []))
       .catch(() => {});
 
-    const onNotification = (notif: { title: string; body?: string; type?: string }) => {
+    const onNotification = (notif: { title: string; body?: string; type?: string; payload?: any; data?: any }) => {
+      const href = notificationHref(notif);
       toast.custom(
         (t) => (
-          <div className={`flex items-start gap-3 bg-white border border-gray-200 rounded-xl shadow-lg px-4 py-3 max-w-sm transition-all ${t.visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}>
+          <button
+            type="button"
+            onClick={() => {
+              toast.dismiss(t.id);
+              if (href) router.push(href);
+            }}
+            className={`flex items-start gap-3 text-left bg-white border border-gray-200 rounded-xl shadow-lg px-4 py-3 max-w-sm transition-all ${t.visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}
+          >
             <span className="text-lg leading-none mt-0.5">{typeEmoji(notif.type)}</span>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-900">{notif.title}</p>
               {notif.body && <p className="text-xs text-gray-500 mt-0.5 truncate">{notif.body}</p>}
             </div>
-          </div>
+          </button>
         ),
-        { duration: 5000, position: 'top-right' },
+        { duration: 6000, position: 'top-right' },
       );
 
       desktopNotify(notif.title, notif.body, notif.type);
@@ -107,7 +128,7 @@ export function NotificationListener() {
       socket.off('presence:online', onOnline);
       socket.off('presence:offline', onOffline);
     };
-  }, [user, qc, setAll, addOnline, removeOnline]);
+  }, [user, token, qc, router, setAll, addOnline, removeOnline]);
 
   useEffect(() => { return () => { disconnectSocket(); }; }, []);
 

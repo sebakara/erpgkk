@@ -17,14 +17,15 @@ export class NotificationsService {
       body: payload.body || null,
       payload: payload.data ? JSON.stringify(payload.data) : null,
     });
-    return this.knex('notifications').where({ id }).first();
+    return this.parseRow(await this.knex('notifications').where({ id }).first());
   }
 
-  findAll(userId: string) {
-    return this.knex('notifications')
+  async findAll(userId: string) {
+    const rows = await this.knex('notifications')
       .where({ user_id: userId })
       .orderBy('created_at', 'desc')
       .limit(50);
+    return rows.map((row) => this.parseRow(row));
   }
 
   unreadCount(userId: string) {
@@ -37,5 +38,13 @@ export class NotificationsService {
 
   markAllRead(userId: string) {
     return this.knex('notifications').where({ user_id: userId, is_read: false }).update({ is_read: true });
+  }
+
+  private parseRow(row: any) {
+    if (!row) return row;
+    if (typeof row.payload === 'string') {
+      try { row.payload = JSON.parse(row.payload); } catch { /* keep raw */ }
+    }
+    return row;
   }
 }

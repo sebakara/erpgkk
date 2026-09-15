@@ -37,9 +37,10 @@ interface Props {
   onMove: (issueId: string, status: string, position: number) => void;
   projectId: string;
   sprintId?: string;
+  initialIssueId?: string | null;
 }
 
-export function KanbanBoard({ columns: initialColumns, onMove, projectId, sprintId }: Props) {
+export function KanbanBoard({ columns: initialColumns, onMove, projectId, sprintId, initialIssueId }: Props) {
   const [cols, setCols] = useState<Column[]>(initialColumns);
   const isDragging = useRef(false);
   const serverFingerprint = useRef(columnsFingerprint(initialColumns));
@@ -55,7 +56,11 @@ export function KanbanBoard({ columns: initialColumns, onMove, projectId, sprint
 
   const [activeIssue, setActiveIssue] = useState<Issue | null>(null);
   const [activeTargetKey, setActiveTargetKey] = useState<string | null>(null);
-  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(initialIssueId ?? null);
+
+  useEffect(() => {
+    if (initialIssueId) setSelectedIssueId(initialIssueId);
+  }, [initialIssueId]);
   // Track the column the card came from — onDragOver moves it before handleDragEnd fires
   const srcColKeyRef = useRef<string | null>(null);
 

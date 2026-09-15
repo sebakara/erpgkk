@@ -1,11 +1,15 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { v4 as uuid } from 'uuid';
 
 @Injectable()
 export class SprintsService {
-  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
+  constructor(
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   findAll(projectId: string) {
     return this.knex('sprints').where({ project_id: projectId }).whereNull('deleted_at').orderBy('created_at', 'desc');
@@ -28,7 +32,7 @@ export class SprintsService {
     return this.findById(id);
   }
 
-  async start(projectId: string, id: string) {
+  async start(projectId: string, id: string, actorId?: string) {
     const sprint = await this.findById(id);
     if (sprint.project_id !== projectId) throw new NotFoundException('Sprint not found');
     if (sprint.status === 'completed') throw new BadRequestException('Cannot start a completed sprint');
@@ -43,10 +47,17 @@ export class SprintsService {
     }
 
     await this.knex('sprints').where({ id }).update({ status: 'active', updated_at: new Date() });
-    return this.findById(id);
+    const started = await this.findById(id);
+    await this.notifyProject(projectId, actorId, {
+      type: 'sprint_started',
+      title: 'Sprint started',
+      body: started.name,
+      data: { project_id: projectId, sprint_id: id, href: `/projects/${projectId}/board` },
+    });
+    return started;
   }
 
-  async complete(projectId: string, id: string) {
+  async complete(projectId: string, id: string, actorId?: string) {
     const sprint = await this.findById(id);
     if (sprint.project_id !== projectId) throw new NotFoundException('Sprint not found');
     if (sprint.status === 'completed') return { sprint, rolled: 0, rolledTo: null };
@@ -74,8 +85,17 @@ export class SprintsService {
       await trx('sprints').where({ id }).update({ status: 'completed', updated_at: new Date() });
     });
 
+    const finished = await this.findById(id);
+    await this.notifyProject(projectId, actorId, {
+      type: 'sprint_completed',
+      title: 'Sprint completed',
+      body: leftoverIds.length
+        ? `${finished.name} · ${leftoverIds.length} open issue${leftoverIds.length === 1 ? '' : 's'} rolled`
+        : finished.name,
+      data: { project_id: projectId, sprint_id: id, href: `/projects/${projectId}/board` },
+    });
     return {
-      sprint: await this.findById(id),
+      sprint: finished,
       rolled: leftoverIds.length,
       rolledTo: next ? { id: next.id, name: next.name } : null,
     };
@@ -92,5 +112,15 @@ export class SprintsService {
 
   remove(id: string) {
     return this.knex('sprints').where({ id }).update({ deleted_at: new Date() });
+  }
+
+  private async notifyProject(
+    projectId: string,
+    actorId: string | undefined,
+    payload: { type: string; title: string; body?: string; data?: any },
+  ) {
+    const members = await this.knex('project_members').where({ project_id: projectId }).pluck('user_id');
+    const owners = await this.knex('projects').where({ id: projectId }).pluck('owner_id');
+    await this.notificationsGateway.notifyUsers([...members, ...owners], payload, actorId);
   }
 }

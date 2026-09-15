@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
@@ -25,7 +25,7 @@ type IssueWrite = {
 export class IssuesService {
   constructor(
     @Inject(KNEX_CONNECTION) private readonly knex: Knex,
-    @Optional() private readonly notificationsGateway: NotificationsGateway,
+    private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
   async findAll(projectId: string, sprintId?: string, userId?: string, userRole?: string) {
@@ -154,14 +154,17 @@ export class IssuesService {
     });
     await this.replaceAssignees(id, ids);
     const issue = await this.findById(id);
-    this.notifyNewAssignees(ids, reporterId, issue.title);
+    await this.notifyNewAssignees(ids, reporterId, issue);
     return issue;
   }
 
-  async update(id: string, data: IssueWrite, role?: string) {
+  async update(id: string, data: IssueWrite, role?: string, actorId?: string) {
     const payload = roleCanPlanWork(role) ? data : this.developerIssueWrite(data);
     const { assignee_ids, assignee_id, ...rest } = payload;
     const hasAssigneePayload = Array.isArray(assignee_ids) || assignee_id !== undefined;
+    const previousStatus = rest.status !== undefined
+      ? (await this.knex('issues').where({ id }).select('status').first())?.status
+      : undefined;
     if (Object.keys(rest).length) {
       await this.knex('issues').where({ id }).update({ ...rest, updated_at: new Date() });
     }
@@ -172,15 +175,27 @@ export class IssuesService {
       await this.replaceAssignees(id, ids);
       const issue = await this.findById(id);
       const added = ids.filter((uid) => !previous.includes(uid));
-      this.notifyNewAssignees(added, issue.reporter_id, issue.title);
+      await this.notifyNewAssignees(added, actorId, issue);
+      if (rest.status && rest.status !== previousStatus) {
+        await this.notifyStatusChange(issue, previousStatus, rest.status, actorId);
+      }
       return issue;
     }
-    return this.findById(id);
+    const issue = await this.findById(id);
+    if (rest.status && rest.status !== previousStatus) {
+      await this.notifyStatusChange(issue, previousStatus, rest.status, actorId);
+    }
+    return issue;
   }
 
-  async moveStatus(id: string, status: string, position: number, role?: string) {
+  async moveStatus(id: string, status: string, position: number, role?: string, actorId?: string) {
     this.assertDeveloperStatus(status, role);
+    const previous = await this.knex('issues').where({ id }).select('status').first();
     await this.knex('issues').where({ id }).update({ status, position, updated_at: new Date() });
+    if (previous?.status && previous.status !== status) {
+      const issue = await this.findById(id);
+      await this.notifyStatusChange(issue, previous.status, status, actorId);
+    }
   }
 
   async addComment(issueId: string, authorId: string, body: string) {
@@ -191,19 +206,18 @@ export class IssuesService {
       .where('c.id', id)
       .select('c.*', this.knex.raw("CONCAT(u.first_name, ' ', u.last_name) as author_name"), 'u.avatar_url as author_avatar')
       .first();
-    const issue = await this.knex('issues').where({ id: issueId }).select('reporter_id', 'assignee_id', 'title').first();
-    const extra: string[] = await this.knex('issue_assignees').where({ issue_id: issueId }).pluck('user_id');
-    const notified = new Set<string>([authorId]);
-    for (const recipientId of [issue?.reporter_id, issue?.assignee_id, ...extra]) {
-      if (recipientId && !notified.has(recipientId)) {
-        notified.add(recipientId);
-        this.notificationsGateway?.notifyUser(recipientId, {
-          type: 'comment_added',
-          title: 'New comment on an issue',
-          body: issue.title,
-        });
-      }
-    }
+    const issue = await this.findById(issueId);
+    const recipients = [
+      issue?.reporter_id,
+      issue?.assignee_id,
+      ...(issue?.assignees ?? []).map((person: any) => person.id),
+    ];
+    await this.notificationsGateway.notifyUsers(recipients, {
+      type: 'comment_added',
+      title: 'New comment on a task',
+      body: issue.title,
+      data: this.issueNotifData(issue),
+    }, authorId);
     return comment;
   }
 
@@ -231,7 +245,7 @@ export class IssuesService {
       await this.replaceAssignees(id, ids);
       const issue = await this.findById(id);
       created.push(issue);
-      this.notifyNewAssignees(ids, reporterId, item.title ?? issue.title);
+      await this.notifyNewAssignees(ids, reporterId, issue);
     }
     return created;
   }
@@ -376,15 +390,38 @@ export class IssuesService {
     });
   }
 
-  private notifyNewAssignees(userIds: string[], reporterId: string, title: string) {
-    for (const userId of userIds) {
-      if (userId && userId !== reporterId) {
-        this.notificationsGateway?.notifyUser(userId, {
-          type: 'issue_assigned',
-          title: 'Issue assigned to you',
-          body: title,
-        });
-      }
-    }
+  private issueNotifData(issue: any) {
+    return {
+      issue_id: issue.id,
+      project_id: issue.project_id,
+      href: `/projects/${issue.project_id}/board?issue=${issue.id}`,
+    };
+  }
+
+  private async notifyNewAssignees(userIds: string[], actorId: string | undefined, issue: any) {
+    if (!userIds.length || !issue) return;
+    await this.notificationsGateway.notifyUsers(userIds, {
+      type: 'issue_assigned',
+      title: 'You were assigned a task',
+      body: issue.title,
+      data: this.issueNotifData(issue),
+    }, actorId);
+  }
+
+  private async notifyStatusChange(issue: any, from: string | undefined, to: string, actorId?: string) {
+    if (!issue || !to || from === to) return;
+    if (to !== 'in_review' && to !== 'done') return;
+    const watchers = [
+      issue.reporter_id,
+      issue.assignee_id,
+      ...(issue.assignees ?? []).map((person: any) => person.id),
+    ];
+    const label = String(to).replace(/_/g, ' ');
+    await this.notificationsGateway.notifyUsers(watchers, {
+      type: 'issue_status_changed',
+      title: `Task moved to ${label}`,
+      body: issue.title,
+      data: { ...this.issueNotifData(issue), status: to },
+    }, actorId);
   }
 }

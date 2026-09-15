@@ -10,11 +10,17 @@ import {
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 
-@WebSocketGateway({ cors: { origin: '*' }, namespace: '/ws' })
+@WebSocketGateway({
+  namespace: '/ws',
+  path: '/api/socket.io',
+  cors: { origin: true, credentials: true },
+})
 export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
+  private readonly logger = new Logger(NotificationsGateway.name);
 
   private userSockets = new Map<string, Set<string>>();
 
@@ -26,15 +32,23 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
 
   async handleConnection(client: Socket) {
     try {
-      const token = client.handshake.auth?.token || client.handshake.headers?.authorization?.split(' ')[1];
-      const payload = this.jwtService.verify(token, { secret: this.configService.get('JWT_SECRET') });
-      client.data.userId = payload.sub;
-      client.join(`user:${payload.sub}`);
-      const wasOffline = !this.userSockets.get(payload.sub)?.size;
-      if (!this.userSockets.has(payload.sub)) this.userSockets.set(payload.sub, new Set());
-      this.userSockets.get(payload.sub).add(client.id);
-      if (wasOffline) this.server.emit('presence:online', { userId: payload.sub });
-    } catch {
+      const raw = client.handshake.auth?.token
+        || (typeof client.handshake.query?.token === 'string' ? client.handshake.query.token : '')
+        || client.handshake.headers?.authorization?.split(' ')[1];
+      const token = String(raw || '').replace(/^Bearer\s+/i, '');
+      const payload = this.jwtService.verify(token, {
+        secret: this.configService.get('JWT_SECRET', 'fallback-secret'),
+      });
+      const userId = String(payload.sub || payload.id || '');
+      if (!userId) throw new Error('missing user id');
+      client.data.userId = userId;
+      client.join(`user:${userId}`);
+      const wasOffline = !this.userSockets.get(userId)?.size;
+      if (!this.userSockets.has(userId)) this.userSockets.set(userId, new Set());
+      this.userSockets.get(userId).add(client.id);
+      if (wasOffline) this.server.emit('presence:online', { userId });
+    } catch (err) {
+      this.logger.warn(`Socket rejected: ${(err as Error).message}`);
       client.disconnect();
     }
   }
@@ -60,13 +74,20 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   async pushToUser(userId: string, event: string, data: any) {
+    if (!userId || !this.server) return;
     this.server.to(`user:${userId}`).emit(event, data);
   }
 
   async notifyUser(userId: string, payload: { type: string; title: string; body?: string; data?: any }) {
-    const notif = await this.notificationsService.create(userId, payload);
-    this.pushToUser(userId, 'notification', notif);
-    return notif;
+    if (!userId) return null;
+    try {
+      const notif = await this.notificationsService.create(userId, payload);
+      await this.pushToUser(userId, 'notification', notif);
+      return notif;
+    } catch (err) {
+      this.logger.error(`Failed to notify ${userId}: ${(err as Error).message}`);
+      return null;
+    }
   }
 
   async notifyUsers(

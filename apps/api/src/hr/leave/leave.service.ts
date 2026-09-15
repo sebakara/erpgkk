@@ -51,7 +51,7 @@ export class LeaveService {
       type: 'leave_requested',
       title: 'New leave request',
       body: `${name} requested ${days} day${days !== 1 ? 's' : ''} of ${data.type} leave`,
-      data: { leave_request_id: id },
+      data: { leave_request_id: id, href: '/hr' },
     });
 
     return req;
@@ -62,10 +62,11 @@ export class LeaveService {
       status: 'approved', approver_id: approverId, approver_note: note, updated_at: new Date(),
     });
     const req = await this.findById(id);
-    this.notificationsGateway?.notifyUser(req.user_id, {
+    await this.notificationsGateway?.notifyUser(req.user_id, {
       type: 'leave_approved',
       title: 'Leave request approved ✓',
       body: `Your ${req.type} leave request has been approved`,
+      data: { leave_request_id: id, href: '/hr' },
     });
     return req;
   }
@@ -75,10 +76,11 @@ export class LeaveService {
       status: 'rejected', approver_id: approverId, approver_note: note, updated_at: new Date(),
     });
     const req = await this.findById(id);
-    this.notificationsGateway?.notifyUser(req.user_id, {
+    await this.notificationsGateway?.notifyUser(req.user_id, {
       type: 'leave_rejected',
       title: 'Leave request rejected',
       body: note || `Your ${req.type} leave request was not approved`,
+      data: { leave_request_id: id, href: '/hr' },
     });
     return req;
   }
