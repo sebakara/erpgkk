@@ -1,13 +1,13 @@
 'use client';
 import { useState, useRef } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { User, Lock, CheckCircle, Camera } from 'lucide-react';
-import { authApi, usersApi } from '@/lib/api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { User, Lock, CheckCircle, Camera, Github } from 'lucide-react';
+import { authApi, usersApi, githubApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { getInitials, cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
-type Section = 'info' | 'password';
+type Section = 'info' | 'password' | 'github';
 
 export default function ProfilePage() {
   const { user, updateUser } = useAuthStore();
@@ -110,6 +110,7 @@ export default function ProfilePage() {
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {([
           { key: 'info', label: 'Personal Info', icon: <User size={14} /> },
+          { key: 'github', label: 'GitHub', icon: <Github size={14} /> },
           { key: 'password', label: 'Password', icon: <Lock size={14} /> },
         ] as { key: Section; label: string; icon: React.ReactNode }[]).map(({ key, label, icon }) => (
           <button
@@ -177,6 +178,8 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {section === 'github' && <GitHubProfileSection />}
+
       {/* Change password form */}
       {section === 'password' && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
@@ -224,6 +227,91 @@ export default function ProfilePage() {
               {changePwdMutation.isPending ? 'Updating…' : 'Change password'}
             </button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GitHubProfileSection() {
+  const qc = useQueryClient();
+  const [username, setUsername] = useState('');
+  const { data: account, isLoading } = useQuery({
+    queryKey: ['github-me'],
+    queryFn: githubApi.me,
+  });
+
+  const mapMutation = useMutation({
+    mutationFn: () => githubApi.mapMe(username.trim()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['github-me'] });
+      toast.success('GitHub account linked');
+      setUsername('');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message ?? 'Failed to link GitHub'),
+  });
+
+  const unmapMutation = useMutation({
+    mutationFn: githubApi.unmapMe,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['github-me'] });
+      toast.success('GitHub account unlinked');
+    },
+    onError: () => toast.error('Failed to unlink'),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-40">
+        <div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <p className="text-sm text-gray-500">
+        Link your GitHub username so pull requests, reviews, and commits show up next to your name.
+        Matching is by GitHub user id, not email.
+      </p>
+      {account?.github_username ? (
+        <div className="flex items-center gap-3">
+          {account.avatar_url ? (
+            <img src={account.avatar_url} alt="" className="w-10 h-10 rounded-full" />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-gray-900 text-white flex items-center justify-center">
+              <Github size={16} />
+            </div>
+          )}
+          <div className="flex-1">
+            <p className="font-medium text-gray-900">@{account.github_username}</p>
+            <p className="text-xs text-gray-400">
+              Connected {account.connected_at ? new Date(account.connected_at).toLocaleDateString() : ''}
+            </p>
+          </div>
+          <button
+            onClick={() => unmapMutation.mutate()}
+            disabled={unmapMutation.isPending}
+            className="text-sm text-red-600 hover:underline disabled:opacity-50"
+          >
+            Unlink
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="github username"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          <button
+            onClick={() => mapMutation.mutate()}
+            disabled={!username.trim() || mapMutation.isPending}
+            className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black disabled:opacity-50"
+          >
+            {mapMutation.isPending ? 'Linking…' : 'Link'}
+          </button>
         </div>
       )}
     </div>

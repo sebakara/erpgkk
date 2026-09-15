@@ -1,8 +1,7 @@
 import type { Knex } from 'knex';
-import * as dotenv from 'dotenv';
-import { resolve } from 'path';
+import { loadEnvFiles } from '../load-env';
 
-dotenv.config({ path: resolve(__dirname, '../../.env') });
+loadEnvFiles();
 
 function dbConnection() {
   const socketPath = process.env.DB_SOCKET;

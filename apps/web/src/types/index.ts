@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'manager' | 'employee';
+export type Role = 'admin' | 'manager' | 'employee' | 'hr' | 'project_manager';
 export type IssueType = 'bug' | 'task' | 'story' | 'epic';
 export type IssueStatus = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done';
 export type IssuePriority = 'low' | 'medium' | 'high' | 'urgent';
@@ -66,6 +66,18 @@ export interface Sprint {
   end_date?: string;
 }
 
+export interface LinkedPullRequest {
+  id: string;
+  link_id: string;
+  number: number;
+  title: string;
+  state: string;
+  merged: boolean;
+  html_url?: string | null;
+  source_branch?: string | null;
+  repository?: string;
+}
+
 export interface Issue {
   id: string;
   project_id: string;
@@ -73,8 +85,19 @@ export interface Issue {
   assignee_id?: string;
   assignee_name?: string;
   assignee_avatar?: string;
+  assignee_email?: string;
+  assignee_job_title?: string;
+  assignee_role?: string;
+  assignee_department?: string;
   reporter_id: string;
   reporter_name?: string;
+  reporter_avatar?: string;
+  reporter_email?: string;
+  reporter_job_title?: string;
+  reporter_role?: string;
+  reporter_department?: string;
+  commenters_json?: string | TaskPerson[];
+  assignees?: TaskPerson[];
   title: string;
   description?: string;
   type: IssueType;
@@ -85,7 +108,20 @@ export interface Issue {
   label?: string;
   due_date?: string;
   comments?: Comment[];
+  comment_count?: number;
+  pull_requests?: LinkedPullRequest[];
   created_at: string;
+}
+
+export interface TaskPerson {
+  id: string;
+  name: string;
+  email?: string;
+  job_title?: string;
+  role?: string;
+  avatar_url?: string;
+  department?: string;
+  involvement?: string;
 }
 
 export interface Comment {

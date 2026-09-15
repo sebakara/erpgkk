@@ -3,6 +3,7 @@ export enum Role {
   Manager = 'manager',
   Employee = 'employee',
   Hr = 'hr',
+  ProjectManager = 'project_manager',
 }
 
 export enum IssueType {
@@ -59,4 +60,8 @@ export enum NotificationEventType {
   ReviewSubmitted = 'review.submitted',
   Announcement = 'announcement.created',
   MentionedInComment = 'mention.comment',
+  GitHubReviewRequested = 'github_review_requested',
+  GitHubPrMerged = 'github_pr_merged',
+  GitHubReleasePublished = 'github_release_published',
+  GitHubInstallationConnected = 'github_installation_connected',
 }

@@ -3,21 +3,23 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { cn } from '@/lib/utils';
+import { roleLabel } from '@/lib/roles';
 import { useQuery } from '@tanstack/react-query';
 import { chatApi } from '@/lib/api';
 import {
   LayoutDashboard, FolderOpen, Users, Bell, LogOut, Settings, MessageSquare,
-  Users2, Mail,
+  Users2, Mail, CheckSquare,
 } from 'lucide-react';
 
 const ALL_NAV = [
-  { label: 'Dashboard',    href: '/dashboard',    icon: LayoutDashboard, roles: ['admin', 'manager', 'employee'] },
-  { label: 'Projects',     href: '/projects',     icon: FolderOpen,      roles: ['admin', 'manager', 'employee'] },
-  { label: 'HR',           href: '/hr',           icon: Users,           roles: ['admin', 'manager', 'employee'] },
+  { label: 'Dashboard',    href: '/dashboard',    icon: LayoutDashboard, roles: ['admin', 'manager', 'project_manager', 'hr', 'employee'] },
+  { label: 'My work',      href: '/my-work',      icon: CheckSquare,     roles: ['admin', 'manager', 'project_manager', 'employee'] },
+  { label: 'Projects',     href: '/projects',     icon: FolderOpen,      roles: ['admin', 'manager', 'project_manager', 'employee'] },
+  { label: 'HR',           href: '/hr',           icon: Users,           roles: ['admin', 'manager', 'project_manager', 'hr', 'employee'] },
   { label: 'Clients',      href: '/clients',      icon: Users2,          roles: ['admin', 'manager'] },
   { label: 'Newsletters',  href: '/newsletters',  icon: Mail,            roles: ['admin', 'manager'] },
-  { label: 'Messages',     href: '/chat',         icon: MessageSquare,   roles: ['admin', 'manager', 'employee'] },
-  { label: 'Notifications',href: '/notifications',icon: Bell,            roles: ['admin', 'manager', 'employee'] },
+  { label: 'Messages',     href: '/chat',         icon: MessageSquare,   roles: ['admin', 'manager', 'project_manager', 'hr', 'employee'] },
+  { label: 'Notifications',href: '/notifications',icon: Bell,            roles: ['admin', 'manager', 'project_manager', 'hr', 'employee'] },
   { label: 'Settings',     href: '/settings',     icon: Settings,        roles: ['admin', 'manager'] },
 ];
 
@@ -73,7 +75,7 @@ export function Sidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{user?.first_name} {user?.last_name}</p>
-            <p className="text-xs text-indigo-300 capitalize">{user?.role}</p>
+            <p className="text-xs text-indigo-300">{roleLabel(user?.role)}</p>
           </div>
         </Link>
         <button onClick={logout} className="w-full flex items-center gap-2.5 px-3 py-2 text-indigo-300 hover:text-white hover:bg-indigo-800 rounded-lg text-sm transition-colors">

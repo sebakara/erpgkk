@@ -3,7 +3,7 @@ import { useParams, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { projectsApi, sprintsApi } from '@/lib/api';
 import Link from 'next/link';
-import { LayoutGrid, ListTodo, FileText, BarChart2, Settings, CircleDot, FolderOpen } from 'lucide-react';
+import { LayoutGrid, ListTodo, FileText, BarChart2, Settings, CircleDot, FolderOpen, GitBranch } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const TABS = [
@@ -11,6 +11,7 @@ const TABS = [
   { label: 'Board',     segment: 'board',     icon: LayoutGrid },
   { label: 'Backlog',   segment: 'backlog',   icon: ListTodo   },
   { label: 'Docs',      segment: 'docs',      icon: FileText   },
+  { label: 'Development', segment: 'development', icon: GitBranch },
   { label: 'Folder',    segment: 'folder',    icon: FolderOpen },
   { label: 'Analytics', segment: 'analytics', icon: BarChart2  },
   { label: 'Settings',  segment: 'settings',  icon: Settings   },
@@ -60,13 +61,20 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
 
         {activeSprint && (
           <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3 flex items-center justify-between mb-4">
-            <div>
-              <p className="text-xs text-indigo-500 font-medium uppercase tracking-wide">Active Sprint</p>
-              <p className="text-indigo-900 font-semibold text-sm">{activeSprint.name}</p>
+            <div className="min-w-0">
+              <p className="text-xs text-indigo-500 font-medium uppercase tracking-wide">Active cycle</p>
+              <p className="text-indigo-900 font-semibold text-sm truncate">{activeSprint.name}</p>
+              {activeSprint.start_date && activeSprint.end_date && (
+                <p className="text-xs text-indigo-400 mt-0.5">
+                  {new Date(activeSprint.start_date).toLocaleDateString()} → {new Date(activeSprint.end_date).toLocaleDateString()}
+                </p>
+              )}
             </div>
-            <Link href={`/projects/${id}/board`} className="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-indigo-700">
-              Open Board
-            </Link>
+            {!pathname.includes('/board') && (
+              <Link href={`/projects/${id}/board`} className="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-indigo-700 shrink-0">
+                Open Board
+              </Link>
+            )}
           </div>
         )}
 

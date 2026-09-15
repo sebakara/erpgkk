@@ -83,8 +83,16 @@ export class PerformanceService {
         type: 'performance_review_created',
         title: 'Performance review created',
         body: `${reviewer.first_name} ${reviewer.last_name} created a review for ${reviewee.first_name} ${reviewee.last_name} — ${data.period}`,
-        data: { review_id: id },
+        data: { review_id: id, href: '/hr' },
       });
+      if (data.reviewee_id !== reviewerId) {
+        await this.deptNotifier.notifyUser(data.reviewee_id, {
+          type: 'performance_review_added',
+          title: 'You have a new performance review',
+          body: `${data.period}`,
+          data: { review_id: id, href: '/hr' },
+        });
+      }
     }
 
     return this.findById(id);

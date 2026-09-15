@@ -37,7 +37,7 @@ export class FilesController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({
       destination: (_req, _file, cb) => {

@@ -72,6 +72,8 @@ jobs:
         run: |
           rsync -az --delete \
             --exclude='.git' \
+            --exclude='.env' \
+            --exclude='.env.*' \
             --exclude='apps/api/.env' \
             --exclude='apps/api/.env.*' \
             --exclude='apps/web/.env' \

@@ -14,6 +14,8 @@ const TABLES = [
 
 export async function up(knex: Knex): Promise<void> {
   for (const table of TABLES) {
+    const hasTable = await knex.schema.hasTable(table);
+    if (!hasTable) continue;
     const has = await knex.schema.hasColumn(table, 'deleted_at');
     if (!has) {
       await knex.schema.alterTable(table, (t) => {

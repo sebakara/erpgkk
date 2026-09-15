@@ -16,31 +16,36 @@ export class ProjectsController {
     return this.projectsService.findAll(user.company_id, user.id, user.role);
   }
 
+  @Get('overview')
+  overview(@CurrentUser() user: any) {
+    return this.projectsService.workspaceOverview(user.company_id, user.id, user.role);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.projectsService.findById(id, user.company_id);
+    return this.projectsService.findById(id, user.company_id, user);
   }
 
   @Post()
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager)
   create(@CurrentUser() user: any, @Body() body: any) {
     return this.projectsService.create(user.company_id, user.id, body);
   }
 
   @Patch(':id')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
   update(@Param('id') id: string, @Body() body: any) {
     return this.projectsService.update(id, body);
   }
 
   @Post(':id/members')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
   addMember(@Param('id') id: string, @Body() body: { userId: string; role?: string }) {
     return this.projectsService.addMember(id, body.userId, body.role);
   }
 
   @Delete(':id/members/:userId')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
   removeMember(@Param('id') id: string, @Param('userId') userId: string) {
     return this.projectsService.removeMember(id, userId);
   }
@@ -51,7 +56,7 @@ export class ProjectsController {
   }
 
   @Delete(':id')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
   remove(@Param('id') id: string, @CurrentUser() user: any) {
     return this.projectsService.remove(id, user.company_id);
   }

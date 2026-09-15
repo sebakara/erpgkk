@@ -4,7 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, Bug, CheckSquare, BookOpen, Zap, Send, Pencil, Save } from 'lucide-react';
 import { issuesApi } from '@/lib/api';
 import { PRIORITY_CONFIG, type Issue, type IssueStatus, type IssuePriority, type IssueType, type ProjectMember, type Comment } from '@/types';
-import { getInitials, formatDate, cn } from '@/lib/utils';
+import { getInitials, formatDate, cn, assigneesOf } from '@/lib/utils';
+import { AssigneePicker } from '@/components/kanban/assignee-picker';
+import { IssuePrLinks } from '@/components/issues/issue-pr-links';
 import toast from 'react-hot-toast';
 
 const TYPE_ICON = { bug: Bug, task: CheckSquare, story: BookOpen, epic: Zap };
@@ -15,10 +17,12 @@ interface Props {
   projectId: string;
   issueId: string;
   members: ProjectMember[];
+  canAssign?: boolean;
+  canPlan?: boolean;
   onClose: () => void;
 }
 
-export function IssueDetailDrawer({ projectId, issueId, members, onClose }: Props) {
+export function IssueDetailDrawer({ projectId, issueId, members, canAssign, canPlan, onClose }: Props) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -37,7 +41,6 @@ export function IssueDetailDrawer({ projectId, issueId, members, onClose }: Prop
         type: issue.type,
         priority: issue.priority,
         status: issue.status,
-        assignee_id: issue.assignee_id,
         story_points: issue.story_points,
         due_date: issue.due_date,
       });
@@ -156,7 +159,7 @@ export function IssueDetailDrawer({ projectId, issueId, members, onClose }: Prop
                     <option value="todo">To Do</option>
                     <option value="in_progress">In Progress</option>
                     <option value="in_review">In Review</option>
-                    <option value="done">Done</option>
+                    {canPlan && <option value="done">Done</option>}
                   </select>
                 ) : (
                   <StatusBadge status={issue.status} />
@@ -200,30 +203,18 @@ export function IssueDetailDrawer({ projectId, issueId, members, onClose }: Prop
                 )}
               </MetaRow>
 
-              <MetaRow label="Assignee">
-                {editing ? (
-                  <select
-                    value={editForm.assignee_id ?? issue.assignee_id ?? ''}
-                    onChange={ef('assignee_id')}
-                    className="text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500 w-full"
-                  >
-                    <option value="">Unassigned</option>
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.first_name} {m.last_name}
-                      </option>
-                    ))}
-                  </select>
-                ) : issue.assignee_name ? (
-                  <span className="flex items-center gap-1.5 text-sm text-gray-700">
-                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold flex items-center justify-center">
-                      {getInitials(issue.assignee_name)}
-                    </span>
-                    {issue.assignee_name}
+              <MetaRow label="Assignees">
+                <div className="flex items-center gap-2 min-w-0">
+                  <AssigneePicker
+                    issue={issue}
+                    projectId={projectId}
+                    members={members}
+                    canAssign={canAssign}
+                  />
+                  <span className={cn('text-sm truncate', assigneesOf(issue).length ? 'text-gray-700' : 'text-gray-400')}>
+                    {assigneesOf(issue).map((p) => p.name).join(', ') || 'Unassigned'}
                   </span>
-                ) : (
-                  <span className="text-sm text-gray-400">Unassigned</span>
-                )}
+                </div>
               </MetaRow>
 
               <MetaRow label="Story Points">
@@ -283,6 +274,8 @@ export function IssueDetailDrawer({ projectId, issueId, members, onClose }: Prop
               <p className="text-sm text-gray-400 italic">No description provided.</p>
             )}
           </div>
+
+          <IssuePrLinks projectId={projectId} issue={issue} />
 
           {/* Comments */}
           <div className="px-5 py-4">

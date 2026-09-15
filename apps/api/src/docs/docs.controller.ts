@@ -22,19 +22,19 @@ export class DocsController {
   }
 
   @Post()
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
   create(@Param('projectId') projectId: string, @CurrentUser() user: any, @Body() body: any) {
     return this.docsService.create(projectId, user.id, body);
   }
 
   @Patch(':id')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
   update(@Param('id') id: string, @Body() body: any) {
     return this.docsService.update(id, body);
   }
 
   @Delete(':id')
-  @Roles(Role.Admin, Role.Manager, Role.Employee)
+  @Roles(Role.Admin, Role.Manager, Role.ProjectManager, Role.Employee)
   remove(@Param('id') id: string) {
     return this.docsService.remove(id);
   }
